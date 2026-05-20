@@ -1,0 +1,136 @@
+# Configuration tuned for digital-born-only deployments.
+#
+# Assumes every incoming PDF has an embedded text layer (LaTeX / Word / Pages
+# exports, etc). The scanned path is hard-disabled at the master toggle:
+# anything that resolves to scanned -- by explicit flag or auto-detection --
+# is rejected before any OCR worker spawns.
+#
+# Hardware target: RTX 3090-class host (~24 GiB VRAM, 24+ CPU cores). With
+# scanned support off, idle VRAM peak stays at ~5 GiB (analyzer + formula
+# recognizer + optional table engine) and no transient ~14 GiB OCR spike
+# ever occurs.
+#
+# Formulas, tables, and references are all enabled.
+
+[pipeline]
+# --- Page rendering -----------------------------------------------------------
+
+# Unused on this deployment: nothing renders at this DPI. Left at the canonical
+# scanned value for symmetry; the auto-DPI selector in `_run_stages` ignores
+# it whenever `digital_born=True`.
+render_dpi = 300
+
+# The biggest single lever for digital-born throughput. Layout downsamples to
+# 800x800 internally and pdf_oxide text extraction is resolution-independent,
+# so 150 DPI matches 300 DPI on character recall (~99.9%) while halving render
+# wall.
+render_dpi_digital_born = 150
+
+page_format  = "jpeg"
+crop_format  = "png"
+jpeg_quality = 90
+
+# --- Layout model -------------------------------------------------------------
+
+layout_confidence   = 0.5
+layout_batch_size   = 8
+layout_device       = "cuda:0"
+layout_fp16         = true
+layout_fast_preproc = true
+
+# --- OCR ----------------------------------------------------------------------
+#
+# RapidOCR engines never load on this deployment (`scanned_enabled=false`).
+# The values below are kept at safe defaults so they don't crash if someone
+# flips `scanned_enabled` back on without re-tuning.
+
+ocr_batch_size = 64
+ocr_min_score  = 0.5
+ocr_use_cuda   = false
+
+# --- Digital-born auto-detection ---------------------------------------------
+#
+# Probe values are still in play -- the auto-detect runs even when
+# `scanned_enabled=false`. A misclassified PDF that resolves to scanned will
+# be rejected with HTTP 415 by the FastAPI service before any worker spawns.
+digital_born_sample_pages   = 5
+digital_born_text_ratio     = 0.3
+digital_born_min_text_chars = 100
+
+# --- Parallelism --------------------------------------------------------------
+
+# Bench-selected on a 72-core host. Higher values exhaust OpenBLAS pthread
+# slots and degrade throughput. On hosts with fewer cores, drop this to
+# `min(cores, 16)`.
+digital_born_workers = 16
+
+# Unused on this deployment. Left at 1 so it doesn't accidentally reserve
+# VRAM if `scanned_enabled` is flipped back on.
+ocr_workers = 1
+
+# Render workers defaults to `min(16, os.cpu_count())`. Uncomment to override.
+# render_workers = 16
+
+# --- Scanned-PDF master toggle ------------------------------------------------
+
+# Hard-disabled: the FastAPI service responds 415 Unsupported Media Type to
+# any request that resolves to scanned. RapidOCR engines never load, the
+# resident analyzer never has to close+reload between requests, and total
+# idle VRAM peak stays at ~5 GiB.
+scanned_enabled = false
+
+# --- MISS-image bundling ------------------------------------------------------
+
+# Digital-born MISS rates are low (text extraction rarely fails on a clean
+# text layer). Keep the full set so the rare miss still ships a crop fallback.
+bundle_miss_images_for = ["text", "image", "reference", "formula"]
+
+# --- Formula recognition ------------------------------------------------------
+
+formula_enabled        = true
+formula_model_id       = "PaddlePaddle/PP-FormulaNet-L_safetensors"
+formula_device         = "cuda:0"
+formula_dtype          = "fp16"
+formula_batch_size     = 8
+formula_max_new_tokens = 1536
+formula_torch_compile  = false
+formula_bucketed       = true
+
+# Defaults are calibrated for the 150 DPI digital-born render used above.
+formula_bucket_small_threshold  = 2500
+formula_bucket_medium_threshold = 15000
+formula_bucket_small_tokens     = 192
+formula_bucket_medium_tokens    = 512
+
+# --- Table extraction ---------------------------------------------------------
+
+table_enabled     = true
+table_batch_size  = 8
+table_device      = "cuda:0"
+table_min_side_px = 120
+
+# --- Reference parsing (GROBID) ----------------------------------------------
+#
+# GROBID is NOT bundled. Start the server separately, e.g.:
+#   docker run --rm -p 8070:8070 grobid/grobid:0.9.0
+
+references_enabled = true
+grobid_url         = "http://localhost:8070"
+grobid_timeout_s   = 60.0
+reference_labels   = ["reference", "reference_content"]
+
+# --- Debugging ----------------------------------------------------------------
+
+retain_temp_dir = false
+
+
+[api]
+host           = "0.0.0.0"
+port           = 8000
+boot_timeout_s = 120
+
+
+[logging]
+level           = "INFO"
+pdf_oxide_level = "WARNING"
+format          = "%(asctime)s %(levelname)-7s %(name)s :: %(message)s"

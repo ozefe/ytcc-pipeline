@@ -1,0 +1,59 @@
+# Digital-born-only deployment tuned for NVIDIA A100-80GB hosts.
+#
+# Run:
+#   docker compose -f docker/compose.digital-born-a100.yml up -d
+#
+# Prerequisites:
+#   - Docker Engine 19.03+ with the NVIDIA Container Toolkit installed:
+#     https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+#   - An A100 (or comparable 80 GiB VRAM) GPU. The image's baked config sets
+#     layout_batch_size=24 and formula_batch_size=16 -- these will OOM on cards
+#     with less than ~24 GiB. Use the `digital-born` profile on smaller GPUs.
+#
+# Boot time: formula_torch_compile=true triggers Inductor warmup at startup,
+# adding ~20-30 s on top of the cold model load. The healthcheck grace is
+# extended to 180 s to account for that.
+
+services:
+    ytcc-pipeline:
+        image: ghcr.io/ozefe/ytcc-pipeline:digital-born-a100-baked
+        container_name: ytcc-pipeline-digital-born-a100
+        restart: unless-stopped
+        depends_on:
+            grobid:
+                condition: service_healthy
+        environment:
+            YTCC_GROBID_URL: http://grobid:8070
+        ports:
+            - "8000:8000"
+        volumes:
+            - ytcc-hf-cache:/opt/hf_cache
+        deploy:
+            resources:
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: 1
+                          capabilities: [gpu]
+        healthcheck:
+            test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 180s
+
+    grobid:
+        image: grobid/grobid:0.9.0
+        container_name: ytcc-pipeline-digital-born-a100-grobid
+        restart: unless-stopped
+        healthcheck:
+            test:
+                - "CMD-SHELL"
+                - "curl -fsS http://localhost:8070/api/isalive | grep -q true"
+            interval: 30s
+            timeout: 10s
+            retries: 5
+            start_period: 60s
+
+volumes:
+    ytcc-hf-cache:

@@ -1,0 +1,135 @@
+# Configuration tuned for scanned-only deployments.
+#
+# Assumes every incoming PDF is scanned (no embedded text layer). Auto-detection
+# is still in place, but the digital-born branch is effectively dead weight here
+# -- callers should pass `digital_born=False` to skip the probe entirely.
+#
+# Hardware target: same RTX 3090-class host as the default `config.toml`
+# (~24 GiB VRAM, 24+ CPU cores). The scanned-path VRAM dance still applies:
+# the FastAPI service closes the resident analyzer while OCR workers run.
+#
+# Formulas, tables, and references are all enabled. Formula bucket thresholds
+# are scaled ~4x because scanned crops render at 300 DPI vs the 150 DPI used
+# for digital-born content.
+
+[pipeline]
+# --- Page rendering -----------------------------------------------------------
+
+# OCR loses ~3% of text blocks at 150 DPI, so 300 is the scanned floor.
+render_dpi = 300
+
+# `render_dpi_digital_born` is unused on a scanned-only deployment but kept at
+# the documented default so an accidental digital-born request still works.
+render_dpi_digital_born = 150
+
+# Layout downsamples to 800x800 internally; JPEG artefacts are erased before
+# they could affect detection on scanned pages.
+page_format  = "jpeg"
+crop_format  = "png"
+jpeg_quality = 90
+
+# --- Layout model -------------------------------------------------------------
+
+layout_confidence   = 0.5
+layout_batch_size   = 8
+layout_device       = "cuda:0"
+layout_fp16         = true
+layout_fast_preproc = true
+
+# --- OCR (the hot path on this deployment) ------------------------------------
+
+# RapidOCR docs note 6 is usually optimal; 64 is fine because empty crops
+# short-circuit early and scanned pages typically have many empty regions.
+ocr_batch_size = 64
+ocr_min_score  = 0.5
+ocr_use_cuda   = true
+
+# --- Digital-born auto-detection ---------------------------------------------
+#
+# Kept at defaults: callers should pass `digital_born=False` explicitly to
+# bypass the probe. The values below only matter if a caller omits the flag
+# AND the PDF is misclassified.
+digital_born_sample_pages   = 5
+digital_born_text_ratio     = 0.3
+digital_born_min_text_chars = 100
+
+# --- Parallelism --------------------------------------------------------------
+
+# Unused on the scanned path (only the digital-born block extractor uses it).
+# Left at 1 so an accidental digital-born request doesn't spawn 16 idle workers.
+digital_born_workers = 1
+
+# Six is the empirically stable ceiling on a 24 GiB 3090 alongside the resident
+# formula recognizer (~1.8 GiB) and table engine (~1 GiB). Each OCR worker
+# holds ~2 GiB. Raise to 8 on cards >= 32 GiB; drop to 4 on cards <= 16 GiB.
+ocr_workers = 6
+
+# Render workers defaults to `min(16, os.cpu_count())`. Uncomment to override.
+# render_workers = 16
+
+# --- Scanned-PDF master toggle ------------------------------------------------
+
+# Must stay on -- this is the scanned-only deployment.
+scanned_enabled = true
+
+# --- MISS-image bundling ------------------------------------------------------
+
+# Keep MISS crops for every block type so consumers can fall back to the
+# rendered page region when OCR / formula recognition fails. Scanned corpora
+# are MISS-prone enough that the extra bytes are worth it.
+bundle_miss_images_for = ["text", "image", "reference", "formula"]
+
+# --- Formula recognition ------------------------------------------------------
+
+formula_enabled        = true
+formula_model_id       = "PaddlePaddle/PP-FormulaNet-L_safetensors"
+formula_device         = "cuda:0"
+formula_dtype          = "fp16"
+formula_batch_size     = 8
+formula_max_new_tokens = 1536
+formula_torch_compile  = false
+formula_bucketed       = true
+
+# Thresholds are bbox area in source-page px^2. The defaults shipped in
+# `config.toml` are calibrated for 150 DPI digital-born renders; scanned
+# crops at 300 DPI are ~4x larger in area, so the thresholds scale accordingly.
+formula_bucket_small_threshold  = 10000
+formula_bucket_medium_threshold = 60000
+
+# Token caps are unit-free; they don't scale with DPI. Raise if you observe
+# `formula truncated` WARNINGs on a representative document.
+formula_bucket_small_tokens  = 192
+formula_bucket_medium_tokens = 512
+
+# --- Table extraction ---------------------------------------------------------
+
+table_enabled     = true
+table_batch_size  = 8
+table_device      = "cuda:0"
+table_min_side_px = 120
+
+# --- Reference parsing (GROBID) ----------------------------------------------
+#
+# GROBID is NOT bundled. Start the server separately, e.g.:
+#   docker run --rm -p 8070:8070 grobid/grobid:0.9.0
+
+references_enabled = true
+grobid_url         = "http://localhost:8070"
+grobid_timeout_s   = 60.0
+reference_labels   = ["reference", "reference_content"]
+
+# --- Debugging ----------------------------------------------------------------
+
+retain_temp_dir = false
+
+
+[api]
+host           = "0.0.0.0"
+port           = 8000
+boot_timeout_s = 120
+
+
+[logging]
+level           = "INFO"
+pdf_oxide_level = "WARNING"
+format          = "%(asctime)s %(levelname)-7s %(name)s :: %(message)s"

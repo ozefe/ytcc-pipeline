@@ -1,0 +1,64 @@
+# Scanned-optimized deployment: handles both digital-born and scanned PDFs.
+#
+# Run:
+#   docker compose -f docker/compose.scanned.yml up -d
+#   curl -X POST http://localhost:8000/process \
+#       -F "pdf=@paper.pdf" -F "language=en" -o paper.tar
+#
+# Prerequisites:
+#   - Docker Engine 19.03+ with the NVIDIA Container Toolkit installed:
+#     https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+#   - A CUDA-capable GPU with >= 24 GiB VRAM (production reference: RTX 3090).
+#
+# Overrides (no rebuild needed):
+#   - YTCC_* env vars on the ytcc-pipeline service.
+#   - Bind-mount your own config.toml over /app/config.toml.
+
+services:
+    ytcc-pipeline:
+        image: ghcr.io/ozefe/ytcc-pipeline:scanned-baked
+        container_name: ytcc-pipeline-scanned
+        restart: unless-stopped
+        depends_on:
+            grobid:
+                condition: service_healthy
+        environment:
+            # Point the reference stage at the sidecar.
+            YTCC_GROBID_URL: http://grobid:8070
+        ports:
+            - "8000:8000"
+        volumes:
+            # Persist the HF model cache across restarts. Baked images ship with it
+            # populated; slim variants populate on first request and persist it here.
+            - ytcc-hf-cache:/opt/hf_cache
+        deploy:
+            resources:
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: 1
+                          capabilities: [gpu]
+        healthcheck:
+            test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 120s
+
+    grobid:
+        image: grobid/grobid:0.9.0
+        container_name: ytcc-pipeline-scanned-grobid
+        restart: unless-stopped
+        # /api/processCitationList loads the citation CRF on demand; the first
+        # request after startup pays an extra ~3-5 s for that lazy load.
+        healthcheck:
+            test:
+                - "CMD-SHELL"
+                - "curl -fsS http://localhost:8070/api/isalive | grep -q true"
+            interval: 30s
+            timeout: 10s
+            retries: 5
+            start_period: 60s
+
+volumes:
+    ytcc-hf-cache:

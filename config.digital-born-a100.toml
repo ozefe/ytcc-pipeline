@@ -1,0 +1,151 @@
+# Configuration tuned for digital-born-only deployments on a high-VRAM host.
+#
+# Hardware target: 1x NVIDIA A100 SXM4 80 GiB, 64-core CPU, 128 GiB RAM.
+# Scanned path is hard-disabled (same as `config.digital-born.toml`); all
+# remaining tuning is the "more VRAM lets us batch bigger" variant.
+#
+# Notable departures from the 24 GiB defaults:
+#   - `layout_batch_size = 24`   ~1.07-1.15x layout-stage speedup, ~13 GiB
+#                                peak. Headroom is irrelevant on 80 GiB.
+#   - `formula_batch_size = 16`  ~4% more throughput than bs=8 and doubles
+#                                peak VRAM -- still fits comfortably.
+#   - `formula_torch_compile = true`  Worth the ~20-30s warmup on a long-
+#                                lived service where every PDF after the
+#                                first runs kernel-fused.
+#   - `table_batch_size = 16`    Larger structure batches on each SLANet+
+#                                forward pass.
+#
+# CPU is 64 cores but `digital_born_workers` stays at 16: per-bench beyond
+# that point OpenBLAS pthread saturation flattens or reverses gains. RAM
+# headroom matters more for the page-render staging temp dir than for any
+# of the workers themselves.
+#
+# Formulas, tables, and references are all enabled.
+
+[pipeline]
+# --- Page rendering -----------------------------------------------------------
+
+# Unused on this deployment: nothing renders at this DPI. Left at the canonical
+# scanned value for symmetry.
+render_dpi = 300
+
+# Digital-born sweet spot. See the digital-born config notes for why 150 DPI
+# matches 300 DPI on character recall while halving wall.
+render_dpi_digital_born = 150
+
+page_format  = "jpeg"
+crop_format  = "png"
+jpeg_quality = 90
+
+# --- Layout model -------------------------------------------------------------
+
+layout_confidence = 0.5
+
+# Larger batch only pays off when VRAM is abundant. Layout-stage isolated
+# speedup is modest (~1.07-1.15x vs bs=8) but free on this card.
+layout_batch_size = 24
+
+layout_device       = "cuda:0"
+layout_fp16         = true
+layout_fast_preproc = true
+
+# --- OCR ----------------------------------------------------------------------
+#
+# RapidOCR engines never load on this deployment (`scanned_enabled=false`).
+# Values kept at sensible defaults so flipping the toggle back on doesn't
+# require a full re-audit.
+
+ocr_batch_size = 64
+ocr_min_score  = 0.5
+ocr_use_cuda   = false
+
+# --- Digital-born auto-detection ---------------------------------------------
+
+digital_born_sample_pages   = 5
+digital_born_text_ratio     = 0.3
+digital_born_min_text_chars = 100
+
+# --- Parallelism --------------------------------------------------------------
+
+# 16 is the upper end of useful return on the digital-born block extractor.
+# Beyond that OpenBLAS pthread contention flattens the curve; the 64 spare
+# cores on this host are better spent on `render_workers` and the OS.
+digital_born_workers = 16
+
+# Unused -- scanned path is off.
+ocr_workers = 1
+
+# 16 caps the render pool to the documented safe ceiling. Higher values
+# trigger OpenBLAS pthread storms even when the host has many cores.
+render_workers = 16
+
+# --- Scanned-PDF master toggle ------------------------------------------------
+
+scanned_enabled = false
+
+# --- MISS-image bundling ------------------------------------------------------
+
+bundle_miss_images_for = ["text", "image", "reference", "formula"]
+
+# --- Formula recognition ------------------------------------------------------
+
+formula_enabled  = true
+formula_model_id = "PaddlePaddle/PP-FormulaNet-L_safetensors"
+formula_device   = "cuda:0"
+formula_dtype    = "fp16"
+
+# bs=16 gives ~4% more throughput than bs=8 and doubles peak VRAM -- the 80
+# GiB budget absorbs that without breaking a sweat. The truncation risk from
+# mixing easy and hard crops is mitigated by bucketing (see below).
+formula_batch_size = 16
+
+formula_max_new_tokens = 1536
+
+# Pays ~20-30s Inductor warmup on first call but every subsequent batch runs
+# kernel-fused. Strongly recommended on long-lived service deployments where
+# the warmup is amortised across hundreds of PDFs.
+formula_torch_compile = true
+
+formula_bucketed = true
+
+# Defaults calibrated for the 150 DPI digital-born render used above.
+formula_bucket_small_threshold  = 2500
+formula_bucket_medium_threshold = 15000
+formula_bucket_small_tokens     = 192
+formula_bucket_medium_tokens    = 512
+
+# --- Table extraction ---------------------------------------------------------
+
+table_enabled     = true
+table_batch_size  = 16
+table_device      = "cuda:0"
+table_min_side_px = 120
+
+# --- Reference parsing (GROBID) ----------------------------------------------
+#
+# GROBID is NOT bundled. Start the server separately, e.g.:
+#   docker run --rm -p 8070:8070 grobid/grobid:0.9.0
+
+references_enabled = true
+grobid_url         = "http://localhost:8070"
+grobid_timeout_s   = 60.0
+reference_labels   = ["reference", "reference_content"]
+
+# --- Debugging ----------------------------------------------------------------
+
+retain_temp_dir = false
+
+
+[api]
+host = "0.0.0.0"
+port = 8000
+
+# `formula_torch_compile=true` adds ~20-30s Inductor warmup on top of the ~5s
+# cold model load. 180s keeps headroom for slow-disk + cold-cache starts.
+boot_timeout_s = 180
+
+
+[logging]
+level           = "INFO"
+pdf_oxide_level = "WARNING"
+format          = "%(asctime)s %(levelname)-7s %(name)s :: %(message)s"

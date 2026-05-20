@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+title: ytcc-pipeline
+message: >-
+    If you use this software, please cite it using the
+    metadata from this file.
+type: software
+authors:
+    - given-names: Efe
+      family-names: Özyay
+      email: hi@efe.cv
+      orcid: "https://orcid.org/0009-0005-5894-6098"
+repository-code: "https://github.com/ozefe/yoktez"
+abstract: >-
+    Typed Python client for searching, fetching metadata, and
+    downloading theses from the National Thesis Center of
+    Turkey (YÖK Ulusal Tez Merkezi).
+keywords:
+    - thesis
+    - api-client
+    - web-scraping
+    - api-wrapper
+    - academic-project
+    - ulusal-tez-merkezi
+license: MIT
+commit: c8ffa7a2c50fa75e7c9c45c9bb05d79e7e3d5eb2
+version: 0.1.2
+date-released: "2026-05-14"

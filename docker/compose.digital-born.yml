@@ -1,0 +1,60 @@
+# Digital-born-only deployment: rejects scanned PDFs with HTTP 415.
+#
+# Run:
+#   docker compose -f docker/compose.digital-born.yml up -d
+#   curl -X POST http://localhost:8000/process \
+#       -F "pdf=@paper.pdf" -F "language=en" -F "digital_born=true" \
+#       -o paper.tar
+#
+# Prerequisites:
+#   - Docker Engine 19.03+ with the NVIDIA Container Toolkit installed:
+#     https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+#   - A CUDA-capable GPU with >= ~8 GiB VRAM (analyzer + formula + table only).
+#
+# This profile has scanned_enabled=false in the baked config, so no OCR worker
+# ever spawns; the ~12 GiB the OCR pool would otherwise need stays free.
+# Auto-detected scanned PDFs are rejected with HTTP 415.
+
+services:
+    ytcc-pipeline:
+        image: ghcr.io/ozefe/ytcc-pipeline:digital-born-baked
+        container_name: ytcc-pipeline-digital-born
+        restart: unless-stopped
+        depends_on:
+            grobid:
+                condition: service_healthy
+        environment:
+            YTCC_GROBID_URL: http://grobid:8070
+        ports:
+            - "8000:8000"
+        volumes:
+            - ytcc-hf-cache:/opt/hf_cache
+        deploy:
+            resources:
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: 1
+                          capabilities: [gpu]
+        healthcheck:
+            test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 120s
+
+    grobid:
+        image: grobid/grobid:0.9.0
+        container_name: ytcc-pipeline-digital-born-grobid
+        restart: unless-stopped
+        healthcheck:
+            test:
+                - "CMD-SHELL"
+                - "curl -fsS http://localhost:8070/api/isalive | grep -q true"
+            interval: 30s
+            timeout: 10s
+            retries: 5
+            start_period: 60s
+
+volumes:
+    ytcc-hf-cache:

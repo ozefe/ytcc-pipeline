@@ -1,0 +1,307 @@
+# Single source of configuration for the entire project.
+#
+# Loaded by `ytcc_pipeline.load_service_config()` and consumed by:
+#   - The FastAPI service at startup (`ytcc_pipeline.api.app:app`).
+#   - The bundled API smoke harness.
+#
+# Override location via the `YTCC_CONFIG` environment variable.
+# Override individual fields per call via `dataclasses.replace(...)`.
+#
+# Values below ship the recommended performance config; the performance guide
+# in the project documentation carries the per-flag benchmark history.
+
+[pipeline]
+# --- Page rendering -----------------------------------------------------------
+
+# DPI for scanned PDFs. Higher = better OCR accuracy, longer render +
+# decode time. OCR loses ~3% of text blocks at 150 DPI, so the scanned
+# default stays at 300.
+render_dpi = 300
+
+# DPI for digital-born PDFs. Layout downsamples to 800x800 internally and
+# pdf_oxide's text layer is resolution-independent, so 150 DPI matches
+# 300 DPI on character recall (~99.9%) while halving wall time. Auto-
+# selected in `_run_stages` when the PDF tests digital-born.
+render_dpi_digital_born = 150
+
+# Format for the throwaway temp page renders. JPEG is ~30% faster
+# end-to-end on digital-born PDFs because layout downsamples to 800x800
+# so the artefacts are erased; PNG is the lossless reference.
+# Allowed: "jpeg" | "png".
+page_format = "jpeg"
+
+# Format for crops shipped inside the bundle (`images/`). PNG keeps the
+# bundle lossless -- DO NOT switch to JPEG unless you're OK with quality
+# loss on figures/tables you'll never re-render.
+# Allowed: "jpeg" | "png".
+crop_format = "png"
+
+# Quality knob for `page_format=jpeg` AND `crop_format=jpeg`. 1-100;
+# 90 has zero measurable layout-detection delta vs PNG on digital-born
+# PDFs. Drop to 85 to save a few percent more at slight quality risk
+# on Turkish/Arabic edge glyphs.
+jpeg_quality = 90
+
+# --- Layout model -------------------------------------------------------------
+
+# Minimum detection confidence -- blocks below this score are dropped
+# before routing. 0.5 picks up the obvious blocks; lower values surface
+# noise (small marginal text, edges).
+layout_confidence = 0.5
+
+# Pages per GPU forward pass. 8 is the production default: the larger
+# bs=24 sweep gave a 1.07-1.15x layout-stage speedup but did not move
+# the end-to-end wall meaningfully (other stages absorb the saved
+# seconds as noise), and the VRAM peak jumped from ~4 GiB to ~13 GiB,
+# leaving little headroom for the OCR workers during the scanned-path
+# analyzer recycle.
+layout_batch_size = 8
+
+# Torch device string for the SafeTensors layout backend.
+# Examples: "cuda:0", "cuda:1", "cpu".
+layout_device = "cuda:0"
+
+# Run the layout model + tensors in half precision. ~1.7x speedup
+# isolated; <1% detection delta on the test set. SafeTensors only.
+layout_fp16 = true
+
+# Replace HF's PIL-based `AutoImageProcessor` (~120 ms/page CPU) with a
+# cv2 path AND start a producer thread that prepares batch N+1 while the
+# GPU runs batch N. ~2.3x isolated speedup on the layout phase.
+# SafeTensors only.
+layout_fast_preproc = true
+
+# --- OCR (scanned PDFs) -------------------------------------------------------
+
+# RapidOCR's recognition batch size (`Rec.batch_size`). RapidOCR docs
+# note 6 is usually optimal; we leave 64 because empty crops short-
+# circuit early.
+ocr_batch_size = 64
+
+# Per-crop minimum mean recognition score. Below this the OCR result
+# is treated as MISS (the block falls back to a saved image).
+ocr_min_score = 0.5
+
+# Enable ONNXRuntime's `CUDAExecutionProvider` for RapidOCR.
+# ~3.7x speedup vs CPU on the OCR stage. Requires `onnxruntime-gpu`.
+ocr_use_cuda = true
+
+# --- Digital-born auto-detection ---------------------------------------------
+
+# Probe this many pages evenly distributed across the document.
+digital_born_sample_pages = 5
+
+# Share of probed pages that must clear `min_text_chars` for the PDF to
+# count as digital-born. 0.3 = 30% of samples need to be text-rich.
+digital_born_text_ratio = 0.3
+
+# Per-page non-whitespace character threshold. A page with fewer chars
+# is considered text-poor; raise this to make the heuristic stricter on
+# PDFs that have a thin text layer (e.g. scanned-with-OCR PDFs).
+digital_born_min_text_chars = 100
+
+# --- Parallelism --------------------------------------------------------------
+
+# Process-pool size for digital-born block extraction. Each worker
+# opens its own pdf_oxide doc + processes a partition of pages. 16 is
+# the bench-selected value on a 72-core host; higher exhausts OpenBLAS
+# threads. Only the digital-born path uses this pool; the scanned path
+# uses `ocr_workers` below.
+digital_born_workers = 16
+
+# Process-pool size for scanned-PDF OCR. Each worker spawns its own
+# RapidOCR engine + CUDA context (~2 GiB each). 6 is the production
+# value on a 24 GiB 3090 alongside the resident formula recognizer
+# (~1.8 GiB) -- 8 workers saturate the device and let ONNXRuntime's BFC
+# allocator surface stochastic `Failed to allocate memory` exceptions
+# inside the worker forward passes. Raise to 8 on cards >= 32 GiB or
+# drop to 4 on cards <= 16 GiB.
+ocr_workers = 6
+
+# Process-pool size for page rendering. Omit (commented out) to use
+# `min(16, os.cpu_count())`. TOML has no `null`, so absence == default.
+# Cap is to avoid OpenBLAS pthread storms on high-core hosts.
+# render_workers = 16
+
+# --- Scanned-PDF master toggle ------------------------------------------------
+
+# Master toggle for the scanned-PDF path. Set to `false` to run the service
+# as digital-born-only: any incoming PDF that resolves to scanned (either
+# via explicit `digital_born=false` or via auto-detection) is rejected
+# before any OCR worker spawns. With this off the RapidOCR engines never
+# load and their ~2 GiB-per-worker footprint stays free, the analyzer
+# never has to close+reload between requests, and total VRAM headroom on
+# the 3090 grows from ~25 GiB peak to ~5 GiB peak.
+scanned_enabled = true
+
+# --- MISS-image bundling ------------------------------------------------------
+
+# Block types for which a MISS fallback image is written to the bundle when
+# extraction / recognition fails for that block. Default lists every type
+# the pipeline emits (preserves the legacy behavior -- every MISS ships a
+# crop with a `-MISS-` marker in its filename). Drop entries to skip just
+# those types; set to `[]` to disable MISS images entirely. The block's
+# JSON entry still appears with `text = null`, `image_path = null`, and
+# `miss = true` regardless, so downstream consumers retain reading order
+# and bbox even when the image isn't bundled. IMAGE blocks have no MISS
+# state today, so including / excluding them is currently a no-op.
+bundle_miss_images_for = ["text", "image", "reference", "formula"]
+
+# --- Formula recognition (PP-FormulaNet-L) ------------------------------------
+#
+# Every formula knob lives here; nothing is hard-coded inside `FormulaRecognizer`.
+# Override individual fields per call via `dataclasses.replace(...)` or
+# via the matching YTCC_FORMULA_* env vars.
+
+# Master toggle. Off keeps formula blocks crop-only (image_path set,
+# text=None); on runs every cropped formula through PP-FormulaNet-L and
+# fills in the LaTeX text.
+formula_enabled = true
+
+# Hugging Face repo id or local snapshot path. The SafeTensors variant
+# loads directly via transformers; no Paddle runtime is involved.
+formula_model_id = "PaddlePaddle/PP-FormulaNet-L_safetensors"
+
+# Torch device for the formula model. Separate from `layout_device` so
+# multi-GPU hosts can split workloads across cards.
+formula_device = "cuda:0"
+
+# fp16 measured 20/20 exact-match against fp32 on real PDF crops; halves
+# VRAM (~1.8 GiB at fp16 vs ~3.6 GiB at fp32).
+formula_dtype = "fp16"
+
+# Throughput sweet spot. bs=4->8 measured 1.31× speedup on 995802.pdf
+# (79.7 s -> 60.6 s formula stage); bs=8->16 only adds ~4 % more throughput
+# while doubling peak VRAM and bundling more easy crops with hard ones,
+# which inflates the truncated count and lets post-EOS junk leak through.
+formula_batch_size = 8
+
+# Cap on generated tokens per crop. Matches PP-FormulaNet-L's training-time
+# `generation_config.max_length = 1537`; 1536 lets the largest display-
+# equation crops finish without truncation. Also acts as the `large` bucket
+# cap when bucketing is on.
+formula_max_new_tokens = 1536
+
+# Wrap the formula model with `torch.compile`. First call pays ~20-30 s
+# Inductor compilation; subsequent batches run kernel-fused. Off by
+# default -- opt in after measuring on representative documents.
+formula_torch_compile = false
+
+# Sequence-bucketed batching: sort formula crops by bbox area, then
+# group into small/medium/large buckets and cap `max_new_tokens` per
+# bucket so easy crops don't wait on the slow tail in a shared batch.
+# Measured 1.63× speedup vs flat batching on the Turkish digital-born
+# sample. Turn off to fall back to plain order-preserving batching.
+formula_bucketed = true
+
+# Bucket thresholds in source-page pixels² (i.e. bbox area at the page
+# render DPI). Defaults are tuned for the 150 DPI digital-born render;
+# scale them up ~4× if you're feeding the formula stage 300 DPI scanned
+# crops. `medium_threshold` is intentionally low (15000) so genuinely
+# large display equations spill into the `large` bucket and get the
+# full `formula_max_new_tokens` budget.
+formula_bucket_small_threshold  = 2500
+formula_bucket_medium_threshold = 15000
+
+# Per-bucket `max_new_tokens` caps. The `large` bucket reuses
+# `formula_max_new_tokens` from above; only small/medium have their own
+# tighter caps. These values gave 0 truncations on 995802.pdf -- raise
+# them if you observe truncation warnings on a representative document.
+formula_bucket_small_tokens  = 192
+formula_bucket_medium_tokens = 512
+
+# --- Table extraction (RapidTable SLANet+) ------------------------------------
+#
+# Tables detected by the layout pass go through SLANet+ to recover a
+# cell grid; cell text is then extracted via pdf_oxide (digital-born)
+# or RapidOCR (scanned). When the stage is off, TABLE blocks ship as
+# image-only (cells=null, image_path points at the table crop).
+
+# Master toggle. Off (the default) ships TABLE blocks as image-only
+# (cells=null, image_path points at the saved crop). Flip on to load
+# RapidTable SLANet+ and recover the cell grid.
+table_enabled = false
+
+# Tables per SLANet+ structure forward pass.
+table_batch_size = 8
+
+# ONNX device for the SLANet+ session.
+table_device = "cuda:0"
+
+# Tables smaller than this in either dimension skip the structure model
+# and fall back to image-only. Filters out spurious `table` detections
+# on small inline elements.
+table_min_side_px = 120
+
+# --- Reference parsing (GROBID) -----------------------------------------------
+#
+# Forwards every block whose label appears in `reference_labels` to an
+# externally-managed GROBID server in one batched HTTP call per PDF.
+# Parsed structures are attached to `Block.reference` in document.json.
+# When the stage is off, `Block.reference` stays null and the raw
+# reference string survives on `Block.text` as today.
+#
+# GROBID is NOT bundled by this project -- start the server separately:
+#   docker run --rm -p 8070:8070 grobid/grobid:0.9.0
+# Conda + Gradle fallback for hosts without Docker is described in the
+# references guide bundled with the project documentation.
+
+# Master toggle. Off (the default) skips the stage entirely; no HTTP
+# traffic, no `Reference` objects in the output. Flip on to enrich
+# reference-labeled blocks with parsed citations.
+references_enabled = false
+
+# Base URL of the GROBID server. We append `/api/processCitationList`
+# internally; no trailing slash needed.
+grobid_url = "http://localhost:8070"
+
+# Per-request timeout in seconds. One batched POST per PDF, so this is
+# the upper bound on stage wall time regardless of bibliography size.
+# 60 s comfortably covers ~200 refs on a CRF server; raise for very
+# large bibliographies or slower hosts.
+grobid_timeout_s = 60.0
+
+# Layout labels routed through GROBID. Default covers the two labels
+# PP-DocLayoutV3 emits for bibliography content today. Narrow to
+# `["reference_content"]` only if `reference` blocks turn out to be
+# multi-reference blobs in your corpus (GROBID returns a degraded
+# single parse on those -- the raw text remains on `Block.text` either
+# way). Extend if a new bibliography-shaped label appears.
+reference_labels = ["reference", "reference_content"]
+
+# --- Debugging ----------------------------------------------------------------
+
+# Keep the work dir on disk after a successful run (rendered pages,
+# intermediate crops). Useful when debugging -- never enable in prod.
+retain_temp_dir = false
+
+
+# FastAPI service settings.
+[api]
+# Bind address. "0.0.0.0" exposes the service on all interfaces;
+# "127.0.0.1" keeps it loopback-only.
+host = "0.0.0.0"
+
+# TCP port for the uvicorn worker.
+port = 8000
+
+# The bundled API smoke-test helper waits up to this many seconds for
+# `/health` to return 200 before giving up. Cold model load is ~5 s, so the
+# 120 s ceiling is generous.
+boot_timeout_s = 120
+
+
+# Logging -- applied at the application boundary by `LoggingSettings.apply()`.
+# The library itself never configures handlers.
+[logging]
+# Root level for the `ytcc_pipeline.*` logger tree. INFO surfaces one
+# line per pipeline stage; DEBUG adds per-block detail (thousands of
+# lines per PDF).
+level = "INFO"
+
+# `pdf_oxide` emits per-font internals at INFO level -- ~50 lines per
+# PDF, useless for operators. Pin its tree separately.
+pdf_oxide_level = "WARNING"
+
+# Stdlib `%`-style format string for the root handler.
+format = "%(asctime)s %(levelname)-7s %(name)s :: %(message)s"
