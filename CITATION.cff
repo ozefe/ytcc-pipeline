@@ -9,19 +9,21 @@ authors:
       family-names: Özyay
       email: hi@efe.cv
       orcid: "https://orcid.org/0009-0005-5894-6098"
-repository-code: "https://github.com/ozefe/yoktez"
+repository-code: "https://github.com/ozefe/ytcc-pipeline"
 abstract: >-
-    Typed Python client for searching, fetching metadata, and
-    downloading theses from the National Thesis Center of
-    Turkey (YÖK Ulusal Tez Merkezi).
+    A synchronous Python library that turns an academic-thesis
+    PDF into a structured JSON document plus a tar bundle of cropped
+    figures, tables, and formulas. Ships an optional FastAPI wrapper
+    for service deployments.
 keywords:
-    - thesis
-    - api-client
-    - web-scraping
-    - api-wrapper
-    - academic-project
-    - ulusal-tez-merkezi
+    - ocr
+    - pdf-parser
+    - grobid
+    - table-recognition
+    - ai-pipelines
+    - layout-detection
+    - formula-recognition
 license: MIT
-commit: c8ffa7a2c50fa75e7c9c45c9bb05d79e7e3d5eb2
-version: 0.1.2
-date-released: "2026-05-14"
+commit: 5f2ab72d431a5a024b4f5a212eb71624eea62f62
+version: 0.1.1
+date-released: "2026-05-21"
