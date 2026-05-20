@@ -1,0 +1,85 @@
+name: docker
+
+on:
+    push:
+        branches: [main]
+        tags: ["v*"]
+    pull_request:
+        branches: [main]
+
+permissions:
+    contents: read
+    packages: write
+
+# Cancel any in-flight build for the same ref + variant when a new push arrives.
+# Tag builds (releases) are not cancelled.
+concurrency:
+    group: docker-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+    build-push:
+        name: build ${{ matrix.profile }} (${{ matrix.target }})
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                profile: [scanned, digital-born, digital-born-a100]
+                target: [runtime, baked]
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v6
+              with:
+                  fetch-depth: 1
+
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@v4
+
+            - name: Login to GHCR
+              if: github.event_name != 'pull_request'
+              uses: docker/login-action@v4
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Compute tag suffix
+              id: tag
+              run: |
+                  suffix="${{ matrix.profile }}"
+                  if [[ "${{ matrix.target }}" == "baked" ]]; then
+                      suffix="${suffix}-baked"
+                  fi
+                  echo "suffix=${suffix}" >> "$GITHUB_OUTPUT"
+
+            - name: Extract metadata
+              id: meta
+              uses: docker/metadata-action@v6
+              with:
+                  images: ghcr.io/${{ github.repository }}
+                  # The `enable={{is_default_branch}}` guard keeps the floating
+                  # `:<profile>[-baked]` tag pointed at main only.
+                  tags: |
+                      type=raw,value=${{ steps.tag.outputs.suffix }},enable={{is_default_branch}}
+                      type=semver,pattern=${{ steps.tag.outputs.suffix }}-v{{version}}
+                      type=ref,event=pr,prefix=${{ steps.tag.outputs.suffix }}-
+                  labels: |
+                      org.opencontainers.image.title=ytcc-pipeline
+                      org.opencontainers.image.description=PDF processing pipeline for academic theses (${{ matrix.profile }} profile, ${{ matrix.target }} variant)
+                      io.ytcc.profile=${{ matrix.profile }}
+                      io.ytcc.models_baked=${{ matrix.target == 'baked' }}
+
+            - name: Build${{ github.event_name != 'pull_request' && ' and push' || '' }}
+              uses: docker/build-push-action@v7
+              with:
+                  context: .
+                  file: docker/Dockerfile
+                  target: ${{ matrix.target }}
+                  build-args: |
+                      PROFILE=${{ matrix.profile }}
+                  tags: ${{ steps.meta.outputs.tags }}
+                  labels: ${{ steps.meta.outputs.labels }}
+                  push: ${{ github.event_name != 'pull_request' }}
+                  cache-from: type=gha,scope=${{ matrix.profile }}-${{ matrix.target }}
+                  cache-to: type=gha,mode=max,scope=${{ matrix.profile }}-${{ matrix.target }}
+                  provenance: false
