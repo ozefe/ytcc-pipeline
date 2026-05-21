@@ -6,7 +6,6 @@ preconditions aren't met. The structural tests (input validation, empty input,
 missing path) run without loading the model.
 """
 
-
 from typing import TYPE_CHECKING
 
 import numpy as np

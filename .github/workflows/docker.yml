@@ -32,6 +32,23 @@ jobs:
               with:
                   fetch-depth: 1
 
+            # Baked images land at ~11-12 GB (CUDA cuDNN runtime + torch + ORT
+            # + ~5 GB of HF model snapshots); the default ubuntu-latest runner
+            # has only ~14 GB free. Drop preinstalled toolchains we don't need
+            # so the prebake step doesn't ENOSPC partway through. Slim builds
+            # fit in the default space and skip this step.
+            - name: Free runner disk space (baked builds only)
+              if: matrix.target == 'baked'
+              run: |
+                  df -h /
+                  sudo rm -rf /usr/share/dotnet \
+                              /usr/local/lib/android \
+                              /opt/ghc \
+                              /usr/local/share/boost \
+                              /opt/hostedtoolcache/CodeQL
+                  sudo docker image prune --all --force || true
+                  df -h /
+
             - name: Set up Docker Buildx
               uses: docker/setup-buildx-action@v4
 
