@@ -24,7 +24,11 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                profile: [scanned, digital-born, digital-born-a100]
+                profile:
+                    - scanned
+                    - digital-born
+                    - digital-born-a100
+                    - text-extract-a100
                 target: [runtime, baked]
         steps:
             - name: Checkout

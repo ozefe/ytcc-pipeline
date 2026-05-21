@@ -1,0 +1,143 @@
+# Text-extraction profile for an 80 GB VRAM / 128 GB RAM / 16-core CPU host
+# (e.g. NVIDIA A100-80GB with a modest CPU partition).
+#
+# Feature scope: only the text-content stages run.
+#   - text blocks: extracted via pdf_oxide's text layer
+#   - image blocks: cropped and saved
+#   - reference blocks: extracted + parsed via GROBID
+#
+# Formula recognition and table-structure recovery are DISABLED. Formula and
+# table blocks still appear in document.json with their bbox + reading-order,
+# and their cropped images are saved under images/ in the bundle. They just
+# don't get LaTeX text or a cell grid attached.
+#
+# Document scope: DIGITAL-BORN ONLY. `scanned_enabled=false` rejects any PDF
+# that resolves to scanned (explicit `digital_born=false` or auto-detect)
+# before any OCR worker spawns. The FastAPI service returns HTTP 415 on
+# scanned input. Keeps the RapidOCR engines unloaded so the ~12 GB they would
+# otherwise reserve stays free.
+#
+# Why this profile exists: the formula stage on a math-heavy thesis can dominate
+# wall time (~5-8 minutes on a 1000-formula PDF). Skipping it drops end-to-end
+# wall by ~10x while still producing a complete document index with crops for
+# downstream human review or selective re-processing.
+#
+# References require a reachable GROBID server (the bundled compose file
+# starts one as a sidecar).
+
+[pipeline]
+# --- Page rendering -----------------------------------------------------------
+
+# OCR loses ~3% of text blocks at 150 DPI, so 300 is the scanned floor.
+render_dpi = 300
+
+# Layout downsamples to 800x800 internally and pdf_oxide reads the text layer
+# directly, so 150 DPI matches 300 DPI on character recall while halving wall.
+# Picked at runtime when digital_born=True.
+render_dpi_digital_born = 150
+
+page_format  = "jpeg"
+crop_format  = "png"
+jpeg_quality = 90
+
+# --- Layout model -------------------------------------------------------------
+
+layout_confidence = 0.5
+
+# 80 GB VRAM accommodates the larger batch comfortably (~13 GB peak at bs=24).
+# Drops layout-stage isolated wall by ~1.1x vs the bs=8 default.
+layout_batch_size = 24
+
+layout_device       = "cuda:0"
+layout_fp16         = true
+layout_fast_preproc = true
+
+# --- OCR (scanned-PDF path) ---------------------------------------------------
+#
+# Unused on this deployment (`scanned_enabled=false`). Values kept at safe
+# defaults so flipping the toggle back on doesn't require a full re-audit.
+
+ocr_batch_size = 64
+ocr_min_score  = 0.5
+ocr_use_cuda   = false
+
+# --- Digital-born auto-detection ---------------------------------------------
+
+digital_born_sample_pages   = 5
+digital_born_text_ratio     = 0.3
+digital_born_min_text_chars = 100
+
+# --- Parallelism --------------------------------------------------------------
+#
+# 16-core host: leave half the cores for rendering + OS overhead. With the
+# image's baked-in OPENBLAS_NUM_THREADS=1, 8 workers stay well under any
+# pthread / PID limit.
+
+# Process-pool size for digital-born per-page pdf_oxide extraction.
+digital_born_workers = 8
+
+# Render-stage worker count. CPU-bound (pdf_oxide rasterization).
+render_workers = 8
+
+# Unused on this deployment (scanned path is off). Left at 1 so it doesn't
+# accidentally reserve VRAM if `scanned_enabled` is flipped back on.
+ocr_workers = 1
+
+# --- Scanned-PDF master toggle ------------------------------------------------
+
+# Hard-disabled: the FastAPI service responds 415 Unsupported Media Type to any
+# request that resolves to scanned. RapidOCR engines never load and their
+# ~12 GB footprint stays free; the resident analyzer never has to close+reload
+# between requests.
+scanned_enabled = false
+
+# --- MISS-image bundling ------------------------------------------------------
+#
+# Save MISS crops for every type. On a text-focused profile this matters more
+# than usual because failed text extraction is the dominant MISS mode and the
+# crop is the only useful fallback for downstream consumers.
+bundle_miss_images_for = ["text", "image", "reference", "formula"]
+
+# --- Formula recognition: DISABLED -------------------------------------------
+#
+# Skips PP-FormulaNet-L entirely. Formula blocks ship as image-only in the
+# bundle (image_path set, text=null, miss=false). The model never loads, so
+# its ~1.8 GB VRAM stays free and the most-expensive stage in the pipeline
+# (~500 s on a 1000-formula thesis at default settings) is bypassed
+# completely.
+formula_enabled = false
+
+# --- Table extraction: DISABLED ----------------------------------------------
+#
+# Skips RapidTable SLANet+. Table blocks ship as image-only (image_path set,
+# cells=null, n_rows/n_cols=null). The SLANet+ ONNX session never loads
+# (~1 GB VRAM saved).
+table_enabled = false
+
+# --- Reference parsing (GROBID) ----------------------------------------------
+#
+# Enabled. References are the third pillar of this profile alongside text +
+# image extraction. The bundled docker compose file ships a GROBID sidecar
+# at http://grobid:8070; the YTCC_GROBID_URL env var on the service points
+# the pipeline at it.
+
+references_enabled = true
+grobid_url         = "http://localhost:8070"
+grobid_timeout_s   = 60.0
+reference_labels   = ["reference", "reference_content"]
+
+# --- Debugging ----------------------------------------------------------------
+
+retain_temp_dir = false
+
+
+[api]
+host           = "0.0.0.0"
+port           = 8000
+boot_timeout_s = 120
+
+
+[logging]
+level           = "INFO"
+pdf_oxide_level = "WARNING"
+format          = "%(asctime)s %(levelname)-7s %(name)s :: %(message)s"

@@ -1,0 +1,63 @@
+# Text-extraction deployment for an A100-80GB / 128 GB RAM / 16-core host.
+# Digital-born only -- scanned PDFs are rejected with HTTP 415.
+#
+# Feature scope: text + images + references. Formula recognition and table
+# structure recovery are disabled in the baked config; those blocks ship as
+# image-only crops in the bundle.
+#
+# Run:
+#   docker compose -f docker/compose.text-extract-a100.yml up -d
+#
+# Prerequisites:
+#   - Docker Engine 19.03+ with the NVIDIA Container Toolkit installed:
+#     https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+#   - An A100-80GB (or comparable 80 GiB VRAM) GPU. The baked config sets
+#     layout_batch_size=24 which assumes generous VRAM headroom; smaller
+#     cards should use the `digital-born` profile instead.
+#   - This profile has `scanned_enabled=false`; no OCR workers ever spawn,
+#     so the ~12 GB the OCR pool would otherwise reserve stays free.
+#     Auto-detected scanned PDFs are rejected with HTTP 415.
+
+services:
+    ytcc-pipeline:
+        image: ghcr.io/ozefe/ytcc-pipeline:text-extract-a100-baked
+        container_name: ytcc-pipeline-text-extract-a100
+        restart: unless-stopped
+        depends_on:
+            grobid:
+                condition: service_healthy
+        environment:
+            YTCC_GROBID_URL: http://grobid:8070
+        ports:
+            - "8000:8000"
+        volumes:
+            - ytcc-hf-cache:/opt/hf_cache
+        deploy:
+            resources:
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: 1
+                          capabilities: [gpu]
+        healthcheck:
+            test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 120s
+
+    grobid:
+        image: grobid/grobid:0.9.0
+        container_name: ytcc-pipeline-text-extract-a100-grobid
+        restart: unless-stopped
+        healthcheck:
+            test:
+                - "CMD-SHELL"
+                - "curl -fsS http://localhost:8070/api/isalive | grep -q true"
+            interval: 30s
+            timeout: 10s
+            retries: 5
+            start_period: 60s
+
+volumes:
+    ytcc-hf-cache:

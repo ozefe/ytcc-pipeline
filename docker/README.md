@@ -1,17 +1,19 @@
 # Docker images
 
-Pre-built images for three deployment profiles, each available as a slim variant (models fetched on first request) and a baked variant (models pre-downloaded in the image). Published to GitHub Container Registry.
+Pre-built images for four deployment profiles, each available as a slim variant (models fetched on first request) and a baked variant (models pre-downloaded in the image). Published to GitHub Container Registry.
 
 ## Image matrix
 
 | Tag | Profile | Models baked | Approx size |
 |---|---|---|---|
-| `ghcr.io/ozefe/ytcc-pipeline:scanned` | Scanned-optimized | No | ~2 GB |
-| `ghcr.io/ozefe/ytcc-pipeline:scanned-baked` | Scanned-optimized | Yes | ~8 GB |
-| `ghcr.io/ozefe/ytcc-pipeline:digital-born` | Digital-born-only | No | ~2 GB |
-| `ghcr.io/ozefe/ytcc-pipeline:digital-born-baked` | Digital-born-only | Yes | ~8 GB |
-| `ghcr.io/ozefe/ytcc-pipeline:digital-born-a100` | A100-tuned | No | ~2 GB |
-| `ghcr.io/ozefe/ytcc-pipeline:digital-born-a100-baked` | A100-tuned | Yes | ~8 GB |
+| `ghcr.io/ozefe/ytcc-pipeline:scanned` | Scanned-optimized | No | ~6 GB |
+| `ghcr.io/ozefe/ytcc-pipeline:scanned-baked` | Scanned-optimized | Yes | ~11 GB |
+| `ghcr.io/ozefe/ytcc-pipeline:digital-born` | Digital-born-only | No | ~6 GB |
+| `ghcr.io/ozefe/ytcc-pipeline:digital-born-baked` | Digital-born-only | Yes | ~11 GB |
+| `ghcr.io/ozefe/ytcc-pipeline:digital-born-a100` | A100-tuned digital-born | No | ~6 GB |
+| `ghcr.io/ozefe/ytcc-pipeline:digital-born-a100-baked` | A100-tuned digital-born | Yes | ~11 GB |
+| `ghcr.io/ozefe/ytcc-pipeline:text-extract-a100` | A100-tuned digital-born text + image + reference only | No | ~6 GB |
+| `ghcr.io/ozefe/ytcc-pipeline:text-extract-a100-baked` | A100-tuned digital-born text + image + reference only | Yes | ~11 GB |
 
 Tagged releases (`v0.1.0`, `v0.2.0`, ...) additionally publish the pinned form `<tag>-v<version>` (e.g. `:scanned-baked-v0.1.0`). Pin to a versioned tag in production.
 
@@ -20,11 +22,12 @@ Tagged releases (`v0.1.0`, `v0.2.0`, ...) additionally publish the pinned form `
 - **`scanned`** -- mixed corpus (digital-born + scanned). Loads RapidOCR engines; runs OCR on the scanned path. Matches `config.scanned.toml`.
 - **`digital-born`** -- digital-born only (`scanned_enabled=false`). Rejects scanned PDFs at the API layer with HTTP 415; saves the ~12 GiB VRAM the OCR pool would otherwise need. Matches `config.digital-born.toml`.
 - **`digital-born-a100`** -- digital-born only, tuned for A100-80GB. Larger batches (`layout_batch_size=24`, `formula_batch_size=16`), `formula_torch_compile=true`. Matches `config.digital-born-a100.toml`.
+- **`text-extract-a100`** -- digital-born only (`scanned_enabled=false` rejects scanned PDFs with HTTP 415), tuned for A100-80GB / 128 GB RAM / 16-core CPU. **Formula recognition and table-structure recovery are disabled**: formula and table blocks ship as image-only crops in the bundle (no LaTeX text, no cell grid). Drops end-to-end wall by ~10x on math-heavy theses by skipping the formula stage entirely while still producing a complete document index with full text extraction, image crops, and GROBID-parsed references. Matches `config.text-extract-a100.toml`.
 
 ## Choosing a variant
 
-- **Baked** -- ~6 GB larger image, but starts serving in seconds and works offline. Pick this for production deployments where instant cold-start matters.
-- **Slim** -- ~2 GB image, but the first `/process` call pays a ~30s model download. Pick this for dev / CI / air-gapped setups where you'll bind-mount your own `HF_HOME` cache.
+- **Baked** -- ~5 GB larger image, but starts serving in seconds and works offline. Pick this for production deployments where instant cold-start matters.
+- **Slim** -- ~6 GB image (CUDA + torch + ORT dominate; the saving over baked is the unfetched model weights), but the first `/process` call pays a ~30s model download. Pick this for dev / CI / air-gapped setups where you'll bind-mount your own `HF_HOME` cache.
 
 ## Quickstart
 
@@ -100,7 +103,7 @@ docker build -f docker/Dockerfile --target baked \
 
 Valid `PROFILE` values: `scanned`, `digital-born`, `digital-born-a100`. Each maps to a `config.<profile>.toml` at the repo root.
 
-The build uses BuildKit cache mounts for apt + uv. Repeat builds against the same builder cache complete in seconds for the slim variant; baked rebuilds are dominated by the HF snapshot download (~5 GB once, cached on rebuild via the uv layer cache).
+The build uses BuildKit cache mounts for apt + pip. Repeat builds against the same builder cache complete in seconds for the slim variant; baked rebuilds are dominated by the HF snapshot download (~5 GB once, cached on rebuild via the pip wheel cache).
 
 ## Troubleshooting
 
