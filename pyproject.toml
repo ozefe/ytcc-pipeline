@@ -36,6 +36,7 @@ classifiers = [
 dependencies = [
   "pdf-oxide==0.3.47",
   "rapidocr==3.8.1",
+  "rapid-table==3.0.2",
   "onnxruntime-gpu==1.26.0",
   "torch>=2.5,<3",
   "torchvision>=0.20,<1",
