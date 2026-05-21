@@ -30,10 +30,27 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# System packages. `libgl1` + `libglib2.0-0` are pulled in by
-# opencv-python-headless's image codec backends; without them every cv2.imread
-# call on a JPEG / WebP page render fails inside the container. `curl` is used
-# by the HEALTHCHECK and by ad-hoc operator debugging.
+# System packages.
+#   libgl1 + libglib2.0-0: opencv-python-headless's image codec backends.
+#       Without them every cv2.imread call on a JPEG / WebP page render
+#       segfaults.
+#   libfontconfig1 + libfreetype6 + libharfbuzz0b: text-rendering trinity
+#       (font discovery + rasterization + shaping). pdf_oxide loads these
+#       lazily inside render_page() to handle PDFs that reference non-
+#       embedded fonts; without them the spawn worker SIGSEGVs and the
+#       parent surfaces a BrokenProcessPool with no other diagnostic info.
+#   fonts-urw-base35 + fonts-liberation + fonts-dejavu-core + fonts-noto +
+#   fonts-noto-cjk: the free-software font families pdf_oxide recommends when
+#       a PDF embeds a font subset whose base family isn't bundled. The full
+#       noto + noto-cjk set adds ~900 MB to the image but covers essentially
+#       every script that appears in academic PDFs (Latin, Cyrillic, Greek,
+#       Arabic, Hebrew, Devanagari, Thai, CJK, etc.) -- worth the size for an
+#       image that handles a multilingual thesis corpus. urw-base35 supplies
+#       the PostScript Base 35 (NimbusRomNo9L, NimbusSans, ...) that almost
+#       every academic PDF subsets. liberation = MS-metric-compatible
+#       Helvetica/Times/Courier clones. dejavu-core = extended-glyph Latin
+#       fallback.
+#   curl: HEALTHCHECK and ad-hoc operator debugging.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
@@ -43,6 +60,14 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         gnupg \
         libgl1 \
         libglib2.0-0 \
+        libfontconfig1 \
+        libfreetype6 \
+        libharfbuzz0b \
+        fonts-urw-base35 \
+        fonts-liberation \
+        fonts-dejavu-core \
+        fonts-noto \
+        fonts-noto-cjk \
     && add-apt-repository -y ppa:deadsnakes/ppa \
     && apt-get update && apt-get install -y --no-install-recommends \
         "python${PYTHON_VERSION}" \
