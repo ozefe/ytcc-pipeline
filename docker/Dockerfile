@@ -15,7 +15,6 @@
 ARG CUDA_VERSION=12.6.3
 ARG UBUNTU_VERSION=24.04
 ARG PYTHON_VERSION=3.14
-ARG UV_VERSION=0.5.21
 ARG PROFILE=scanned
 
 
@@ -54,9 +53,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN groupadd -r -g 1000 app \
     && useradd -r -u 1000 -g app -m -d /home/app -s /bin/bash app
 
-# Pin uv via its official image; faster + audited vs `curl | sh`.
-COPY --from=ghcr.io/astral-sh/uv:${UV_VERSION} /uv /uvx /usr/local/bin/
-
 
 # ---- Builder: resolve + install deps into a self-contained venv ------------
 FROM base AS builder
@@ -70,9 +66,13 @@ WORKDIR /build
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
 
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv venv --python "python${PYTHON_VERSION}" /opt/venv \
-    && uv pip install --python /opt/venv/bin/python ".[api]"
+# `--upgrade-deps` ensures pip + setuptools inside the venv are recent enough
+# to resolve the modern wheel set (torch CUDA tags, onnxruntime-gpu). pip's
+# wheel cache is mounted from the BuildKit cache so repeated builds skip the
+# downloads.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    "python${PYTHON_VERSION}" -m venv --upgrade-deps /opt/venv \
+    && /opt/venv/bin/pip install ".[api]"
 
 
 # ---- Runtime (slim): copy venv + the chosen profile's config ---------------
