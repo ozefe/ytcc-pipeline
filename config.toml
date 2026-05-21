@@ -7,8 +7,8 @@
 # Override location via the `YTCC_CONFIG` environment variable.
 # Override individual fields per call via `dataclasses.replace(...)`.
 #
-# Values below ship the recommended performance config; the performance guide
-# in the project documentation carries the per-flag benchmark history.
+# Values below ship the recommended performance config. Per-flag benchmark
+# history lives alongside each field's inline comment.
 
 [pipeline]
 # --- Page rendering -----------------------------------------------------------
@@ -243,8 +243,9 @@ table_min_side_px = 120
 #
 # GROBID is NOT bundled by this project -- start the server separately:
 #   docker run --rm -p 8070:8070 grobid/grobid:0.9.0
-# Conda + Gradle fallback for hosts without Docker is described in the
-# references guide bundled with the project documentation.
+# A Conda + Gradle fallback for hosts without Docker is supported by the
+# `scripts/grobid_start.sh` helper, which writes a citation-only config so
+# unused CRF models load lazily on first request.
 
 # Master toggle. Off (the default) skips the stage entirely; no HTTP
 # traffic, no `Reference` objects in the output. Flip on to enrich
@@ -275,7 +276,6 @@ reference_labels = ["reference", "reference_content"]
 # intermediate crops). Useful when debugging -- never enable in prod.
 retain_temp_dir = false
 
-
 # FastAPI service settings.
 [api]
 # Bind address. "0.0.0.0" exposes the service on all interfaces;
@@ -289,7 +289,6 @@ port = 8000
 # `/health` to return 200 before giving up. Cold model load is ~5 s, so the
 # 120 s ceiling is generous.
 boot_timeout_s = 120
-
 
 # Logging -- applied at the application boundary by `LoggingSettings.apply()`.
 # The library itself never configures handlers.

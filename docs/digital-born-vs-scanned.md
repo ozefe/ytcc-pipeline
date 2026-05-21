@@ -108,4 +108,4 @@ If your input mix is e.g. 80% digital-born / 20% scanned, the service handles th
 1. **Digital-born request**: layout analyzer stays resident, no OCR workers spawn.
 2. **Scanned request**: layout analyzer is closed before processing, OCR workers spawn, analyzer reloaded before lock release. Total VRAM peaks at the OCR workers' footprint.
 
-The lock serialisation guarantees only one of these is active at a time. The API service guide details the lifespan dance.
+The lock serialisation guarantees only one of these is active at a time.

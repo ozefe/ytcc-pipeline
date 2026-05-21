@@ -9,8 +9,7 @@
 # Environment overrides (all optional):
 #     GROBID_HOME      Source / install directory containing `gradlew` and
 #                      `grobid-home/`. Default: ~/grobid.
-#     JAVA_HOME        OpenJDK 21 install. Default: ~/.conda/envs/grobid-env
-#                      (the conda env documented in docs/references.md).
+#     JAVA_HOME        OpenJDK 21 install. Default: ~/.conda/envs/grobid-env.
 #     GROBID_PORT      Service port. Default: 8070 (matches `cfg.grobid_url`).
 #     GROBID_LOG_DIR   Server-log directory. Default: $GROBID_HOME/logs.
 #     GROBID_PID_FILE  Pid-file path. Default: $GROBID_HOME/grobid.pid.
@@ -36,7 +35,7 @@ GROBID_READY_TIMEOUT="${GROBID_READY_TIMEOUT:-90}"
 
 die() { echo "grobid_start: $*" >&2; exit 1; }
 
-[[ -d "$GROBID_HOME" ]] || die "GROBID_HOME=$GROBID_HOME does not exist. Clone https://github.com/kermitt2/grobid and rebuild (see docs/references.md)."
+[[ -d "$GROBID_HOME" ]] || die "GROBID_HOME=$GROBID_HOME does not exist. Clone https://github.com/kermitt2/grobid and build it with the bundled gradlew wrapper before running this script."
 [[ -x "$GROBID_HOME/gradlew" ]] || die "missing $GROBID_HOME/gradlew -- is GROBID built?"
 [[ -x "$JAVA_HOME/bin/java" ]] || die "JAVA_HOME=$JAVA_HOME has no bin/java"
 

@@ -169,7 +169,7 @@ The marker is **`-MISS-`**, surrounded by hyphens, so `grep "MISS"` is unambiguo
 
 ## Crop format
 
-`cfg.crop_format` is `"png"` by default. Don't switch to JPEG unless you're OK with quality loss on figures and tables you'll never re-render. JPEG saves are quantised; PNG saves are lossless. This is distinct from `cfg.page_format`, which controls the **temp** page renders consumed by the layout model -- those can safely be JPEG because the layout model downsamples to 800x800 anyway. The performance guide describes the trade-offs in detail.
+`cfg.crop_format` is `"png"` by default. Don't switch to JPEG unless you're OK with quality loss on figures and tables you'll never re-render. JPEG saves are quantised; PNG saves are lossless. This is distinct from `cfg.page_format`, which controls the **temp** page renders consumed by the layout model -- those can safely be JPEG because the layout model downsamples to 800x800 anyway.
 
 ## MISS image bundling
 

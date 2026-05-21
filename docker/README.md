@@ -12,8 +12,8 @@ Pre-built images for four deployment profiles, each available as a slim variant 
 | `ghcr.io/ozefe/ytcc-pipeline:digital-born-baked` | Digital-born-only | Yes | ~11 GB |
 | `ghcr.io/ozefe/ytcc-pipeline:digital-born-a100` | A100-tuned digital-born | No | ~6 GB |
 | `ghcr.io/ozefe/ytcc-pipeline:digital-born-a100-baked` | A100-tuned digital-born | Yes | ~11 GB |
-| `ghcr.io/ozefe/ytcc-pipeline:text-extract` | 48GB VRAM-tuned digital-born text + image + reference only | No | ~6 GB |
-| `ghcr.io/ozefe/ytcc-pipeline:text-extract-baked` | 48GB VRAM-tuned digital-born text + image + reference only | Yes | ~11 GB |
+| `ghcr.io/ozefe/ytcc-pipeline:text-extract-a100` | A100-tuned digital-born text + image + reference only | No | ~6 GB |
+| `ghcr.io/ozefe/ytcc-pipeline:text-extract-a100-baked` | A100-tuned digital-born text + image + reference only | Yes | ~11 GB |
 
 Tagged releases (`v0.1.0`, `v0.2.0`, ...) additionally publish the pinned form `<tag>-v<version>` (e.g. `:scanned-baked-v0.1.0`). Pin to a versioned tag in production.
 
@@ -22,7 +22,7 @@ Tagged releases (`v0.1.0`, `v0.2.0`, ...) additionally publish the pinned form `
 - **`scanned`** -- mixed corpus (digital-born + scanned). Loads RapidOCR engines; runs OCR on the scanned path. Matches `config.scanned.toml`.
 - **`digital-born`** -- digital-born only (`scanned_enabled=false`). Rejects scanned PDFs at the API layer with HTTP 415; saves the ~12 GiB VRAM the OCR pool would otherwise need. Matches `config.digital-born.toml`.
 - **`digital-born-a100`** -- digital-born only, tuned for A100-80GB. Larger batches (`layout_batch_size=24`, `formula_batch_size=16`), `formula_torch_compile=true`. Matches `config.digital-born-a100.toml`.
-- **`text-extract`** -- digital-born only (`scanned_enabled=false` rejects scanned PDFs with HTTP 415), tuned for 48GB VRAM / 64 GB RAM / 16-core CPU. **Formula recognition and table-structure recovery are disabled**: formula and table blocks ship as image-only crops in the bundle (no LaTeX text, no cell grid). Drops end-to-end wall by ~10x on math-heavy theses by skipping the formula stage entirely while still producing a complete document index with full text extraction, image crops, and GROBID-parsed references. Matches `config.text-extract.toml`.
+- **`text-extract-a100`** -- digital-born only (`scanned_enabled=false` rejects scanned PDFs with HTTP 415), tuned for A100-80GB / 128 GB RAM / 16-core CPU. **Formula recognition and table-structure recovery are disabled**: formula and table blocks ship as image-only crops in the bundle (no LaTeX text, no cell grid). Drops end-to-end wall by ~10x on math-heavy theses by skipping the formula stage entirely while still producing a complete document index with full text extraction, image crops, and GROBID-parsed references. Matches `config.text-extract-a100.toml`.
 
 ## Choosing a variant
 
@@ -48,7 +48,7 @@ The compose `depends_on` blocks startup until GROBID's `/api/isalive` returns tr
 Three layers, most-permissive to most-specific:
 
 1. **Bake-in defaults** -- each image ships with the matching `config.toml` already at `/app/config.toml`.
-2. **`YTCC_*` env vars** -- override individual fields. Full list in [`docs/configuration.md`](../docs/configuration.md).
+2. **`YTCC_*` env vars** -- override individual fields. Every `PipelineConfig` field is reachable via its `YTCC_<UPPERCASE_FIELD>` env var.
 3. **Mount your own TOML** -- bind `your.toml` over `/app/config.toml` for full control.
 
 ```bash

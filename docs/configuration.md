@@ -99,7 +99,7 @@ Comma-list fields strip whitespace and drop empties: `"text, , formula,"` is `{"
 
 ## Field reference (selected)
 
-For per-field tuning guidance and benchmark history see the performance guide. The narrative ones below are common sources of surprise.
+Per-field tuning guidance and benchmark history live alongside each field in `PipelineConfig` and the inline `config.toml` comments. The narrative ones below are common sources of surprise.
 
 ### `render_dpi` vs `render_dpi_digital_born`
 

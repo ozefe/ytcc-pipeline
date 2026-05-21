@@ -163,7 +163,7 @@ Batched HTTP call to GROBID to enrich `REFERENCE` blocks.
 
 - Entry point: `run_reference_stage`.
 - Opt-in via `cfg.references_enabled` (default off).
-- Externally-managed dependency: you start the GROBID server separately. The references guide walks through Docker and bare-metal setup.
+- Externally-managed dependency: you start the GROBID server separately (either via the Docker one-liner `docker run --rm -p 8070:8070 grobid/grobid:0.9.0` or via the bundled `scripts/grobid_start.sh` helper for conda + Gradle hosts).
 
 **Knobs:** `references_enabled`, `grobid_url`, `grobid_timeout_s`, `reference_labels`.
 

@@ -1,19 +1,12 @@
 # Benchmarks
 
-Knob-sweep benchmarks for the pipeline. Each sweep varies one
-`PipelineConfig` field across a range of values and records:
+Knob-sweep benchmarks for the pipeline. Each sweep varies one `PipelineConfig` field across a range of values and records:
 
-- **Speed** -- total wall plus per-stage wall (render, layout, blocks,
-  table, formula, reference, bundle).
-- **Resources** -- process-tree CPU%, host RSS, and device VRAM, each as
-  min / median / p95 / max sampled every 250 ms during the run.
-- **Quality** -- block counts, text characters, MISS fallbacks, formula
-  LaTeX recovery, table cells recovered, references parsed. The
-  most-relevant subset is surfaced per sweep.
+- **Speed** -- total wall plus per-stage wall (render, layout, blocks, table, formula, reference, bundle).
+- **Resources** -- process-tree CPU%, host RSS, and device VRAM, each as min / median / p95 / max sampled every 250 ms during the run.
+- **Quality** -- block counts, text characters, MISS fallbacks, formula LaTeX recovery, table cells recovered, references parsed. The most-relevant subset is surfaced per sweep.
 
-Apples-to-apples: every sweep starts from a fixed base `PipelineConfig`
-(`benchmarks/sweeps.py:DIGITAL_BORN_BASE` or `SCANNED_BASE`) with every
-non-essential stage disabled, and overrides only the knob under test.
+Apples-to-apples: every sweep starts from a fixed base `PipelineConfig` (`benchmarks/sweeps.py:DIGITAL_BORN_BASE` or `SCANNED_BASE`) with every non-essential stage disabled, and overrides only the knob under test.
 
 ## Layout
 
@@ -50,17 +43,11 @@ python benchmarks/run_all.py --list
 python -m benchmarks.plot
 ```
 
-The runner is resume-friendly: a sweep with an existing
-`benchmarks/results/sweeps/<name>.csv` is skipped unless `--force` is
-passed.
+The runner is resume-friendly: a sweep with an existing `benchmarks/results/sweeps/<name>.csv` is skipped unless `--force` is passed.
 
 ## Smoke harness (`api_smoke.py`)
 
-`benchmarks/api_smoke.py` is the end-to-end FastAPI smoke harness, kept
-separate from the knob sweeps. It spawns the service as a subprocess,
-posts each entry in `TARGETS`, captures the same resource / per-stage
-metrics, and writes a single JSON report. Use it to validate a
-deployment, not to measure individual knobs.
+`benchmarks/api_smoke.py` is the end-to-end FastAPI smoke harness, kept separate from the knob sweeps. It spawns the service as a subprocess, posts each entry in `TARGETS`, captures the same resource / per-stage metrics, and writes a single JSON report. Use it to validate a deployment, not to measure individual knobs.
 
 ## Sweep catalogue
 
@@ -123,17 +110,8 @@ These don't fit the per-knob `run_all.py` orchestrator (out-of-band concerns: mo
 
 ## OOM handling
 
-Each row is wrapped: `torch.OutOfMemoryError`, CUDA-OOM-shaped
-`RuntimeError`, and any other exception are caught and the row records
-`status="oom"` or `status="error"` plus the exception message. The
-sweep continues with the next value. CUDA cache is cleared between
-rows so OOM in row N doesn't leak into row N+1.
+Each row is wrapped: `torch.OutOfMemoryError`, CUDA-OOM-shaped `RuntimeError`, and any other exception are caught and the row records `status="oom"` or `status="error"` plus the exception message. The sweep continues with the next value. CUDA cache is cleared between rows so OOM in row N doesn't leak into row N+1.
 
 ## Test PDFs
 
-The sweep PDFs live under `samples/` at the project root (committed):
-`904599.pdf` (digital-born English thesis), `084016.pdf` (scanned
-English thesis), `101123.pdf` (Turkish scanned thesis), etc. -- see
-`samples/README.md` for the full index with language / quality notes.
-Replace with your own corpus by dropping PDFs into `samples/` and
-editing the filenames at the top of `benchmarks/sweeps.py`.
+The sweep PDFs live under `samples/` at the project root (committed): `904599.pdf` (digital-born English thesis), `084016.pdf` (scanned English thesis), `101123.pdf` (Turkish scanned thesis), etc. Each PDF under `samples/` is tagged with its language / digital-born / quality characteristics in the directory's own catalogue. Replace with your own corpus by dropping PDFs into `samples/` and editing the filenames at the top of `benchmarks/sweeps.py`.

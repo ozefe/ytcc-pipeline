@@ -77,7 +77,7 @@ is_grobid_alive("http://localhost:8070", timeout_s=5.0)  # -> True / False
 
 ## Parsed `Reference` shape
 
-The output-format guide describes the JSON-level schema. Programmatically:
+The schema dataclass mirrors the JSON output member-for-member:
 
 ```python
 from ytcc_pipeline.schema import Author, Reference

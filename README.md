@@ -37,13 +37,13 @@ uvicorn ytcc_pipeline.api.app:app --host 0.0.0.0 --port 8000
 
 ## Docker
 
-Pre-built images for three deployment profiles (scanned-optimized, digital-born-only, A100-tuned) are published to GitHub Container Registry, each with a slim and a pre-baked variant. The fastest path to a running service is the bundled compose file:
+Pre-built images for four deployment profiles (`scanned`, `digital-born`, `digital-born-a100`, and the text-only `text-extract-a100`) are published to GitHub Container Registry, each with a slim and a pre-baked variant. The fastest path to a running service is the bundled compose file:
 
 ```bash
 docker compose -f docker/compose.scanned.yml up -d
 ```
 
-See [`docker/README.md`](docker/README.md) for the full image matrix, configuration options, and per-profile guidance.
+Image matrix, configuration overrides, and per-profile guidance live under `docker/`.
 
 ## Requirements
 
