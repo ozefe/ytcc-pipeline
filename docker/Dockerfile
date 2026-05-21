@@ -73,12 +73,17 @@ COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
 
 # `--upgrade-deps` ensures pip + setuptools inside the venv are recent enough
-# to resolve the modern wheel set (torch CUDA tags, onnxruntime-gpu). pip's
-# wheel cache is mounted from the BuildKit cache so repeated builds skip the
-# downloads.
+# to resolve the modern wheel set (torch CUDA tags, onnxruntime-gpu) AND to
+# understand PEP 735's `--group` flag. pip's wheel cache is mounted from the
+# BuildKit cache so repeated builds skip the downloads.
+#
+# `--group api` (not `.[api]`) because pyproject.toml puts FastAPI / uvicorn /
+# python-multipart under `[dependency-groups]` (PEP 735), not under
+# `[project.optional-dependencies]`. The optional-extras syntax silently
+# installs nothing extra in that case.
 RUN --mount=type=cache,target=/root/.cache/pip \
     "python${PYTHON_VERSION}" -m venv --upgrade-deps /opt/venv \
-    && /opt/venv/bin/pip install ".[api]"
+    && /opt/venv/bin/pip install . --group api
 
 
 # ---- Runtime (slim): copy venv + the chosen profile's config ---------------
