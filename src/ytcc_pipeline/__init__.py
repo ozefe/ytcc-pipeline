@@ -9,7 +9,7 @@ import os as _os
 # `setdefault` preserves an operator's explicit override.
 _os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from .config import (
     ApiSettings,
