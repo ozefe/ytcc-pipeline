@@ -21,13 +21,21 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def client() -> Iterator[TestClient]:
+def client(cuda_available: bool) -> Iterator[TestClient]:
     """Build a TestClient that runs the FastAPI lifespan (loads the model).
+
+    The lifespan unconditionally constructs the layout analyzer on the configured
+    `layout_device` (production default `cuda:0`); without a reachable GPU torch raises
+    before any test body runs. Skip cleanly in that case so the suite stays green on
+    CPU-only hosts (e.g. GitHub Actions).
 
     Yields:
         A configured `TestClient`. The model load happens once at fixture setup;
         multiple tests can share the same instance via function-scoped teardown.
     """
+    if not cuda_available:
+        pytest.skip("FastAPI lifespan requires CUDA; no GPU available")
+
     from ytcc_pipeline.api.app import app
 
     with TestClient(app) as tc:

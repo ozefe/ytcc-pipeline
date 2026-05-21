@@ -71,6 +71,18 @@ def _cuda_available() -> bool:
 
 
 @pytest.fixture(scope="session")
+def cuda_available() -> bool:
+    """Session-cached CUDA-availability probe.
+
+    Use in fixtures whose setup unavoidably requires CUDA -- e.g. the FastAPI
+    TestClient, whose lifespan handler loads the layout analyzer onto `cuda:0` before
+    any request reaches a handler. Such fixtures should `pytest.skip(...)` when this
+    returns False rather than letting torch raise inside the lifespan.
+    """
+    return _cuda_available()
+
+
+@pytest.fixture(scope="session")
 def test_pdfs_dir() -> Path:
     return TEST_PDFS_DIR
 
