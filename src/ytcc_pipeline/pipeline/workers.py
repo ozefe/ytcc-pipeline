@@ -75,46 +75,65 @@ def worker_digital_born(args: DigitalBornWorkerArgs) -> WorkerResult:
     ) = args
     pdf_name = Path(pdf_path).name
 
-    page_image = read_rgb(page_path)
-    height, width = page_image.shape[:2]
-    doc = pdf_oxide.PdfDocument(pdf_path)
+    # Wrap the worker body so any crash logs with worker context BEFORE the spawn worker
+    # dies. Without this the parent only sees `BrokenProcessPool` with no clue which
+    # page / PDF triggered the failure. Spawn workers don't inherit the parent's log
+    # handlers, but `logger.exception` is at ERROR level so the default handler writes
+    # it to inherited stderr.
+    try:
+        page_image = read_rgb(page_path)
+        height, width = page_image.shape[:2]
+        doc = pdf_oxide.PdfDocument(pdf_path)
 
-    blocks: list[Block] = []
-    for det in detections:
-        route = route_for(det.label)
-        if route is Route.IGNORE:
-            continue
+        blocks: list[Block] = []
+        for det in detections:
+            route = route_for(det.label)
+            if route is Route.IGNORE:
+                continue
 
-        text = (
-            extract_text_digital_born(doc, page_idx, det.bbox, source_dpi=render_dpi)
-            if route in TEXT_ROUTES
-            else None
-        )
-        block = build_block(
-            det,
-            route=route,
-            page_image=page_image,
-            page_no=page_idx + 1,
-            images_dir=Path(images_dir),
-            crop_format=crop_format,
-            jpeg_quality=jpeg_quality,
-            text=text,
-            bundle_miss_images_for=bundle_miss_images_for,
-        )
-        if block.miss:
-            # Orchestrator already emits one summary per PDF. A page-by-page warning
-            # here floods the log on noisy scanned/digital-born runs (hundreds per PDF)
-            # without adding operator-visible signal beyond the summary.
-            logger.debug(
-                "block miss: pdf=%s page=%d label=%s",
-                pdf_name,
-                page_idx + 1,
-                det.label,
+            text = (
+                extract_text_digital_born(
+                    doc,
+                    page_idx,
+                    det.bbox,
+                    source_dpi=render_dpi,
+                )
+                if route in TEXT_ROUTES
+                else None
             )
+            block = build_block(
+                det,
+                route=route,
+                page_image=page_image,
+                page_no=page_idx + 1,
+                images_dir=Path(images_dir),
+                crop_format=crop_format,
+                jpeg_quality=jpeg_quality,
+                text=text,
+                bundle_miss_images_for=bundle_miss_images_for,
+            )
+            if block.miss:
+                # Orchestrator already emits one summary per PDF. A page-by-page warning
+                # here floods the log on noisy scanned/digital-born runs (hundreds per
+                # PDF) without adding operator-visible signal beyond the summary.
+                logger.debug(
+                    "block miss: pdf=%s page=%d label=%s",
+                    pdf_name,
+                    page_idx + 1,
+                    det.label,
+                )
 
-        blocks.append(block)
-
-    return page_idx, height, width, blocks
+            blocks.append(block)
+    except Exception:
+        logger.exception(
+            "worker_digital_born crashed: pdf=%s page_idx=%d page_path=%s",
+            pdf_name,
+            page_idx,
+            page_path,
+        )
+        raise
+    else:
+        return page_idx, height, width, blocks
 
 
 def worker_scanned(args: ScannedWorkerArgs) -> WorkerResult:
@@ -146,64 +165,77 @@ def worker_scanned(args: ScannedWorkerArgs) -> WorkerResult:
         bundle_miss_images_for,
     ) = args
 
-    # One OCR engine per worker process, cached across this worker's tasks via a
-    # module-level singleton. Spawn workers each re-import this module, so the global is
-    # private per worker process -- a class cache would force every worker's
-    # OcrExtractor to coordinate, which is the opposite of the spawn-isolation we want
-    # here.
-    global _worker_ocr  # noqa: PLW0603
-    if _worker_ocr is None:
-        logger.info(
-            "ocr init: worker_pid=%d language=%s use_cuda=%s batch_size=%d",
-            os.getpid(),
-            language,
-            ocr_use_cuda,
-            ocr_batch_size,
-        )
-        _worker_ocr = OcrExtractor(
-            language=language,
-            batch_size=ocr_batch_size,
-            min_score=ocr_min_score,
-            use_cuda=ocr_use_cuda,
-        )
-    ocr = _worker_ocr
-
-    page_image = read_rgb(page_path)
-    height, width = page_image.shape[:2]
-
-    text_by_det_id = extract_text_scanned_batch(
-        ocr,
-        page_image,
-        (d for d in detections if route_for(d.label) in TEXT_ROUTES),
-    )
-
-    blocks: list[Block] = []
-    for det in detections:
-        route = route_for(det.label)
-        if route is Route.IGNORE:
-            continue
-
-        text = text_by_det_id.get(id(det)) if route in TEXT_ROUTES else None
-        block = build_block(
-            det,
-            route=route,
-            page_image=page_image,
-            page_no=page_idx + 1,
-            images_dir=Path(images_dir),
-            crop_format=crop_format,
-            jpeg_quality=jpeg_quality,
-            text=text,
-            bundle_miss_images_for=bundle_miss_images_for,
-        )
-        if block.miss:
-            # Orchestrator's per-PDF MISS summary at WARNING is the operator-visible
-            # signal.
-            logger.debug(
-                "block miss: page=%d label=%s",
-                page_idx + 1,
-                det.label,
+    # Wrap the worker body so any crash (OCR engine load failure, image decode error,
+    # ...) logs with worker context BEFORE the spawn worker dies. Without this the
+    # parent only sees `BrokenProcessPool` with no clue which page / language triggered
+    # the failure.
+    try:
+        # One OCR engine per worker process, cached across this worker's tasks via a
+        # module-level singleton. Spawn workers each re-import this module, so the
+        # global is private per worker process -- a class cache would force every
+        # worker's OcrExtractor to coordinate, which is the opposite of the
+        # spawn-isolation we want here.
+        global _worker_ocr  # noqa: PLW0603
+        if _worker_ocr is None:
+            logger.info(
+                "ocr init: worker_pid=%d language=%s use_cuda=%s batch_size=%d",
+                os.getpid(),
+                language,
+                ocr_use_cuda,
+                ocr_batch_size,
             )
+            _worker_ocr = OcrExtractor(
+                language=language,
+                batch_size=ocr_batch_size,
+                min_score=ocr_min_score,
+                use_cuda=ocr_use_cuda,
+            )
+        ocr = _worker_ocr
 
-        blocks.append(block)
+        page_image = read_rgb(page_path)
+        height, width = page_image.shape[:2]
 
-    return page_idx, height, width, blocks
+        text_by_det_id = extract_text_scanned_batch(
+            ocr,
+            page_image,
+            (d for d in detections if route_for(d.label) in TEXT_ROUTES),
+        )
+
+        blocks: list[Block] = []
+        for det in detections:
+            route = route_for(det.label)
+            if route is Route.IGNORE:
+                continue
+
+            text = text_by_det_id.get(id(det)) if route in TEXT_ROUTES else None
+            block = build_block(
+                det,
+                route=route,
+                page_image=page_image,
+                page_no=page_idx + 1,
+                images_dir=Path(images_dir),
+                crop_format=crop_format,
+                jpeg_quality=jpeg_quality,
+                text=text,
+                bundle_miss_images_for=bundle_miss_images_for,
+            )
+            if block.miss:
+                # Orchestrator's per-PDF MISS summary at WARNING is the operator-visible
+                # signal.
+                logger.debug(
+                    "block miss: page=%d label=%s",
+                    page_idx + 1,
+                    det.label,
+                )
+
+            blocks.append(block)
+    except Exception:
+        logger.exception(
+            "worker_scanned crashed: page_idx=%d page_path=%s language=%s",
+            page_idx,
+            page_path,
+            language,
+        )
+        raise
+    else:
+        return page_idx, height, width, blocks

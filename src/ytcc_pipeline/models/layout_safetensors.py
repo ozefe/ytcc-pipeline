@@ -202,10 +202,22 @@ class SafeTensorsLayoutAnalyzer:
         # `_STOP` sentinel; type as `object` since the union is opaque.
         preprocess_queue: queue.Queue[object] = queue.Queue(maxsize=2)
 
+        # Single-slot error channel from the producer thread to the consumer. Without
+        # this, an exception in `_preprocess` would die inside the daemon thread, never
+        # reach `_STOP`, and hang the consumer on `queue.get()` indefinitely.
+        producer_errors: list[Exception] = []
+
         def producer() -> None:
-            for start, paths in chunks:
-                preprocess_queue.put((start, *self._preprocess(paths)))
-            preprocess_queue.put(_STOP)
+            try:
+                for start, paths in chunks:
+                    preprocess_queue.put((start, *self._preprocess(paths)))
+            except Exception as exc:
+                logger.exception("layout preprocess thread failed")
+                producer_errors.append(exc)
+            finally:
+                # Always sentinel the queue so the consumer wakes up and either yields
+                # the batches it received or re-raises the producer's exception.
+                preprocess_queue.put(_STOP)
 
         thread = threading.Thread(target=producer, daemon=True)
         thread.start()
@@ -214,6 +226,9 @@ class SafeTensorsLayoutAnalyzer:
                 # `item` is a `(start, target_sizes, pixel_values)` triple whenever it's
                 # not the sentinel -- see `producer` above.
                 yield cast("tuple[int, list[tuple[int, int]], torch.Tensor]", item)
+            if producer_errors:
+                # Preserve the original traceback chain.
+                raise producer_errors[0]
         finally:
             thread.join()
 

@@ -110,11 +110,15 @@ def run_reference_stage(  # noqa: C901  -- single-pass: skip-checks, collect ref
     try:
         parsed = client.process_citation_list(citations)
     except GrobidError as exc:
+        # `exc_info=True` keeps the chained transport / parse cause (`__cause__`) on the
+        # traceback so operators can tell DNS / refusal / timeout / malformed-XML apart
+        # without re-running the request.
         logger.warning(
             "stage reference: pdf=%s skipped reason=grobid_error url=%s err=%s",
             pdf_name,
             cfg.grobid_url,
             exc,
+            exc_info=True,
         )
         return pages
 
