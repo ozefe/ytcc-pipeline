@@ -1,6 +1,8 @@
 """Tests for ytcc_pipeline.config."""
 
+import logging
 import os
+from dataclasses import fields
 from typing import TYPE_CHECKING
 
 import pytest
@@ -12,6 +14,7 @@ from ytcc_pipeline.config import (
     ServiceConfig,
     load_service_config,
 )
+from ytcc_pipeline.schema import BlockType
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -37,8 +40,6 @@ def test_scanned_enabled_env_override(clean_env: pytest.MonkeyPatch) -> None:
 
 def test_bundle_miss_images_for_coerces_string_iterable() -> None:
     """A TOML array (`list[str]`) coerces to `frozenset[BlockType]` post-init."""
-    from ytcc_pipeline.schema import BlockType
-
     cfg = PipelineConfig(bundle_miss_images_for=["text", "formula"])  # pyright: ignore[reportArgumentType]
     assert cfg.bundle_miss_images_for == frozenset({BlockType.TEXT, BlockType.FORMULA})
 
@@ -51,8 +52,6 @@ def test_bundle_miss_images_for_empty_iterable_disables_all() -> None:
 
 def test_bundle_miss_images_for_env_override(clean_env: pytest.MonkeyPatch) -> None:
     """Comma-separated env var selects a subset of block types."""
-    from ytcc_pipeline.schema import BlockType
-
     clean_env.setenv("YTCC_BUNDLE_MISS_IMAGES_FOR", "text,reference")
     cfg = PipelineConfig.from_env()
     assert cfg.bundle_miss_images_for == frozenset(
@@ -276,8 +275,6 @@ def test_logging_settings_apply_sets_levels_on_named_loggers() -> None:
     Saves and restores the pre-test levels so the global mutation done by
     `basicConfig(force=True)` doesn't leak across tests run in the same process.
     """
-    import logging
-
     ytcc = logging.getLogger("ytcc_pipeline")
     pdfox = logging.getLogger("pdf_oxide")
     saved_levels = (ytcc.level, pdfox.level)
@@ -297,9 +294,7 @@ def test_env_map_covers_every_pipeline_config_field() -> None:
     Guards against the common drift where a new field lands without a matching env-var
     entry, silently making the knob unreachable from deployment overrides.
     """
-    from dataclasses import fields
-
-    from ytcc_pipeline.config import _ENV_MAP, PipelineConfig
+    from ytcc_pipeline.config import _ENV_MAP
 
     declared = {f.name for f in fields(PipelineConfig)}
     mapped = set(_ENV_MAP)

@@ -51,20 +51,22 @@ def test_empty_path_list_returns_empty_list() -> None:
     assert rec.recognize_batch_paths([], batch_size=4) == []
 
 
-def test_bucket_spec_rejects_invalid_thresholds() -> None:
-    """`small_threshold` must be strictly less than `medium_threshold`."""
+@pytest.mark.parametrize(
+    ("small_threshold", "medium_threshold"),
+    [
+        pytest.param(30000.0, 2500.0, id="small-above-medium"),
+        pytest.param(0, 2500.0, id="small-zero"),
+    ],
+)
+def test_bucket_spec_rejects_invalid_thresholds(
+    small_threshold: float,
+    medium_threshold: float,
+) -> None:
+    """`small_threshold` must be strictly between 0 and `medium_threshold`."""
     with pytest.raises(ValueError, match="small_threshold"):
         BucketSpec(
-            small_threshold=30000.0,
-            medium_threshold=2500.0,
-            small_tokens=128,
-            medium_tokens=384,
-        )
-
-    with pytest.raises(ValueError, match="small_threshold"):
-        BucketSpec(
-            small_threshold=0,
-            medium_threshold=2500.0,
+            small_threshold=small_threshold,
+            medium_threshold=medium_threshold,
             small_tokens=128,
             medium_tokens=384,
         )

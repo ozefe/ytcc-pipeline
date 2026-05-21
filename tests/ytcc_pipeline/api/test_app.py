@@ -8,6 +8,7 @@ synthetic PDF from conftest. It loads the real layout model and is therefore mar
 import json
 import logging
 import tarfile
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import pytest
@@ -24,14 +25,15 @@ if TYPE_CHECKING:
 def client(cuda_available: bool) -> Iterator[TestClient]:
     """Build a TestClient that runs the FastAPI lifespan (loads the model).
 
-    The lifespan unconditionally constructs the layout analyzer on the configured
-    `layout_device` (production default `cuda:0`); without a reachable GPU torch raises
-    before any test body runs. Skip cleanly in that case so the suite stays green on
-    CPU-only hosts (e.g. GitHub Actions).
+    The lifespan unconditionally constructs the layout analyzer on the
+    configured ``layout_device`` (production default ``cuda:0``); without a
+    reachable GPU torch raises before any test body runs. Skip cleanly in that
+    case so the suite stays green on CPU-only hosts (e.g. GitHub Actions).
 
     Yields:
-        A configured `TestClient`. The model load happens once at fixture setup;
-        multiple tests can share the same instance via function-scoped teardown.
+        A configured `TestClient`. The model load happens once at fixture
+        setup; multiple tests can share the same instance via function-scoped
+        teardown.
     """
     if not cuda_available:
         pytest.skip("FastAPI lifespan requires CUDA; no GPU available")
@@ -92,8 +94,6 @@ def test_process_rejects_scanned_when_explicit_digital_born_false_and_disabled(
     The handler short-circuits before staging the upload, so this path needs no model
     work beyond the lifespan-loaded analyzer and exits fast with an explanatory message.
     """
-    from dataclasses import replace
-
     from ytcc_pipeline.api.app import app
 
     monkeypatch.setattr(
@@ -124,8 +124,6 @@ def test_process_rejects_scanned_when_autodetect_resolves_scanned(
     exercising the full request path up to the model dispatcher. The blank-PDF fixture
     has no text layer so detection resolves to scanned.
     """
-    from dataclasses import replace
-
     from ytcc_pipeline.api.app import app
 
     monkeypatch.setattr(
