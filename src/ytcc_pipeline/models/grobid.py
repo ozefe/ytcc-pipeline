@@ -42,7 +42,7 @@ _TEI_NS = "http://www.tei-c.org/ns/1.0"
 # `idno[@type=...]` strings GROBID emits today, mapped to `Reference` attribute names.
 # The comparison is case-insensitive on our side because GROBID has historically
 # alternated between "DOI" / "doi" and "arXiv" / "arxiv" across releases.
-_IDNO_FIELDS: dict[str, str] = {
+_IDNO_TYPE_TO_FIELD: dict[str, str] = {
     "DOI": "doi",
     "URL": "url",
     "PMID": "pmid",
@@ -310,7 +310,7 @@ def _fill_identifiers(
 
     for src in sources:
         for idno in _children_named(src, "idno"):
-            target_field = _IDNO_FIELDS.get((idno.get("type") or "").upper())
+            target_field = _IDNO_TYPE_TO_FIELD.get((idno.get("type") or "").upper())
             if target_field is None or target_field in seen:
                 continue
 

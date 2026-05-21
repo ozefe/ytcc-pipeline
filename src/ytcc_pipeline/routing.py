@@ -89,7 +89,7 @@ class Route(StrEnum):
     TABLE = "table"
 
 
-_ROUTE_BY_LABEL: dict[str, Route] = {
+_LABEL_TO_ROUTE: dict[str, Route] = {
     label: route
     for labels, route in (
         (TEXT_LABELS, Route.TEXT),
@@ -116,7 +116,7 @@ def route_for(label: str) -> Route:
     Returns:
         The `Route` to apply to blocks with this label.
     """
-    route = _ROUTE_BY_LABEL.get(label)
+    route = _LABEL_TO_ROUTE.get(label)
     if route is not None:
         return route
 

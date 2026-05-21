@@ -61,7 +61,8 @@ class _StubEngine:
 
 
 def test_make_table_engine_construction(monkeypatch: pytest.MonkeyPatch) -> None:
-    """`make_table_engine` returns a `TableEngine` whose `.structure` is callable.
+    """`make_table_engine` returns a `TableEngine` whose `.recognize_structure` is
+    callable.
 
     The inner ONNX session is replaced with a stub so the test runs without
     rapid_table's heavy init.
@@ -92,7 +93,7 @@ def test_make_table_engine_construction(monkeypatch: pytest.MonkeyPatch) -> None
 
     monkeypatch.setattr(table_mod.TableEngine, "_build_engine", _stub_build)
     engine = make_table_engine(device="cpu", batch_size=2)
-    out = engine.structure([np.zeros((10, 10, 3), dtype=np.uint8)])
+    out = engine.recognize_structure([np.zeros((10, 10, 3), dtype=np.uint8)])
     assert len(out) == 1
 
     cell_bboxes, logic_points = out[0]

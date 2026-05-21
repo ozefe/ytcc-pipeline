@@ -127,7 +127,7 @@ class TableEngine:
             time.perf_counter() - t0,
         )
 
-    def structure(
+    def recognize_structure(
         self,
         crops: list[np.ndarray],
     ) -> list[tuple[np.ndarray, np.ndarray]]:
@@ -220,7 +220,7 @@ def run_table_stage(  # noqa: PLR0913  -- stage threads through PDF + work dir +
         crops = [_read_or_placeholder(t.crop_path) for t in batch]
 
         try:
-            structures = table_engine.structure(crops)
+            structures = table_engine.recognize_structure(crops)
         except Exception:  # noqa: BLE001  -- one bad batch falls back to image-only; the rest of the stage continues
             logger.warning(
                 "table batch failed: pdf=%s n=%d",

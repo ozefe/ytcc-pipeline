@@ -1,11 +1,12 @@
-"""Image-block processing -- IMAGE + FORMULA routes' crop-and-save step.
+"""Block-crop saving -- the crop-and-save step shared by every crop-bearing route.
 
 Single entry point for "given a layout bbox, save the pixels to disk and give me a
-bundle-relative path I can put in `document.json`."
+bundle-relative path I can put in `document.json`." Used by the IMAGE / FORMULA / TABLE
+routes upfront and by the TEXT / REFERENCE MISS fallbacks.
 
 This is also the natural home for any future preprocessing on the saved crops
 (grayscale, denoise, deskew, contrast normalization, ...) -- all such transforms slot
-between the crop step and the save step inside `process_image_block`.
+between the crop step and the save step inside `save_block_crop`.
 
 The `add_miss_marker_to_filename` helper is here because it operates on names produced
 by this module's `_image_filename` -- it splices a `MISS-` marker into an already-saved
@@ -29,7 +30,7 @@ if TYPE_CHECKING:
     from ytcc_pipeline.config import ImageFormat
 
 
-def process_image_block(  # noqa: PLR0913 -- every arg is mandatory per-crop state; bundling would just rename the call site
+def save_block_crop(  # noqa: PLR0913 -- every arg is mandatory per-crop state; bundling would just rename the call site
     *,
     bbox: tuple[float, float, float, float],
     label: str,

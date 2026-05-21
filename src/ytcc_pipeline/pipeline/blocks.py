@@ -20,7 +20,7 @@ scope.
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from ytcc_pipeline.processors.image import process_image_block
+from ytcc_pipeline.processors.image import save_block_crop
 from ytcc_pipeline.routing import Route
 from ytcc_pipeline.schema import Block, BlockType, Page
 
@@ -106,7 +106,7 @@ def build_block(  # noqa: PLR0913 -- single decision point every worker path fun
             bbox=det.bbox,
             confidence=det.confidence,
             text=None,
-            image_path=process_image_block(
+            image_path=save_block_crop(
                 bbox=det.bbox,
                 label=det.label,
                 page_image=page_image,
@@ -136,7 +136,7 @@ def build_block(  # noqa: PLR0913 -- single decision point every worker path fun
     # retain its reading-order + bbox.
     miss_image_path: str | None = None
     if block_type in bundle_miss_images_for:
-        miss_image_path = process_image_block(
+        miss_image_path = save_block_crop(
             bbox=det.bbox,
             label=det.label,
             page_image=page_image,

@@ -142,7 +142,7 @@ def run_formula_stage(
             # upfront so the formula stage can rename or delete it). Assert documents
             # the invariant for pyright.
             assert original.image_path is not None  # noqa: S101
-            new_image_path = _handle_miss_crop(
+            new_image_path = _finalize_miss_crop(
                 target.crop_path,
                 keep_image=keep_miss_image,
                 fallback_image_path=original.image_path,
@@ -271,7 +271,7 @@ def _drop_success_crop(crop_path: Path) -> bool:
     return True
 
 
-def _handle_miss_crop(
+def _finalize_miss_crop(
     crop_path: Path,
     *,
     keep_image: bool,

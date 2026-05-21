@@ -5,9 +5,10 @@ block-type group, dispatching down to the right model wrapper or PDF I/O call:
 
 - `text`: TEXT and REFERENCE routes. Dispatches digital-born to `extract_text_in_bbox`
   (pdf_oxide-backed), scanned to `OcrExtractor` (RapidOCR-backed).
-- `image`: IMAGE / FORMULA / TABLE routes' crop-and-save half. Single entry point for
-  "save this block's pixels to disk and give me a bundle-relative path." Future
-  preprocessing (grayscale, denoise, deskew) lands here.
+- `image`: the crop-and-save half shared by every crop-bearing route (IMAGE / FORMULA /
+  TABLE upfront, TEXT / REFERENCE on MISS). Single entry point for "save this block's
+  pixels to disk and give me a bundle-relative path." Future preprocessing (grayscale,
+  denoise, deskew) lands here.
 - `formula`: the FORMULA stage proper. Runs the resident `FormulaRecognizer` across
   every formula crop after the block stage, then splices the recognized LaTeX back into
   the page list and cleans up the on-disk crops.
