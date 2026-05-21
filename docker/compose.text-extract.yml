@@ -1,4 +1,4 @@
-# Text-extraction deployment for an A100-80GB / 128 GB RAM / 16-core host.
+# Text-extraction deployment for 48GB VRAM / 64 GB RAM / 16-core host.
 # Digital-born only -- scanned PDFs are rejected with HTTP 415.
 #
 # Feature scope: text + images + references. Formula recognition and table
@@ -6,7 +6,7 @@
 # image-only crops in the bundle.
 #
 # Run:
-#   docker compose -f docker/compose.text-extract-a100.yml up -d
+#   docker compose -f docker/compose.text-extract.yml up -d
 #
 # Prerequisites:
 #   - Docker Engine 19.03+ with the NVIDIA Container Toolkit installed:
@@ -20,8 +20,8 @@
 
 services:
     ytcc-pipeline:
-        image: ghcr.io/ozefe/ytcc-pipeline:text-extract-a100-baked
-        container_name: ytcc-pipeline-text-extract-a100
+        image: ghcr.io/ozefe/ytcc-pipeline:text-extract-baked
+        container_name: ytcc-pipeline-text-extract
         restart: unless-stopped
         depends_on:
             grobid:
@@ -48,7 +48,7 @@ services:
 
     grobid:
         image: grobid/grobid:0.9.0
-        container_name: ytcc-pipeline-text-extract-a100-grobid
+        container_name: ytcc-pipeline-text-extract-grobid
         restart: unless-stopped
         healthcheck:
             test:

@@ -96,7 +96,7 @@ scanned_enabled = false
 # Save MISS crops for every type. On a text-focused profile this matters more
 # than usual because failed text extraction is the dominant MISS mode and the
 # crop is the only useful fallback for downstream consumers.
-bundle_miss_images_for = ["text", "image", "reference", "formula"]
+bundle_miss_images_for = ["text", "image", "reference", "formula", "table"]
 
 # --- Formula recognition: DISABLED -------------------------------------------
 #
@@ -130,12 +130,10 @@ reference_labels   = ["reference", "reference_content"]
 
 retain_temp_dir = false
 
-
 [api]
 host           = "0.0.0.0"
 port           = 8000
 boot_timeout_s = 120
-
 
 [logging]
 level           = "INFO"

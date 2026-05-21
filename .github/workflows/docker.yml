@@ -28,7 +28,7 @@ jobs:
                     - scanned
                     - digital-born
                     - digital-born-a100
-                    - text-extract-a100
+                    - text-extract
                 target: [runtime, baked]
         steps:
             - name: Checkout
