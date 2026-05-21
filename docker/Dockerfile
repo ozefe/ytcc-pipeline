@@ -50,7 +50,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         "python${PYTHON_VERSION}-dev"
 
 # Stable uid/gid so bind-mounted volumes have predictable ownership across hosts.
-RUN groupadd -r -g 1000 app \
+# Ubuntu 24.04 base images ship a default `ubuntu` user at UID/GID 1000; remove
+# it first so we can claim 1000 for the app user (useradd otherwise exits 4 on
+# "UID already in use"). The guarded form keeps the build green on any future
+# base-image variant that drops the ubuntu user.
+RUN if id -u ubuntu >/dev/null 2>&1; then userdel -r ubuntu; fi \
+    && if getent group ubuntu >/dev/null 2>&1; then groupdel ubuntu; fi \
+    && groupadd -r -g 1000 app \
     && useradd -r -u 1000 -g app -m -d /home/app -s /bin/bash app
 
 
