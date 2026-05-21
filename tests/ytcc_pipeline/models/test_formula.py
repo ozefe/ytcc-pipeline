@@ -117,6 +117,7 @@ def test_bucketed_rejects_length_mismatch(tmp_path: Path) -> None:
 
 
 @pytest.mark.slow
+@pytest.mark.gpu
 def test_bucketed_returns_results_in_input_order(tmp_path: Path) -> None:
     """Bucketing must splice results back into the original crop order.
 
@@ -152,6 +153,7 @@ def test_bucketed_returns_results_in_input_order(tmp_path: Path) -> None:
 
 
 @pytest.mark.slow
+@pytest.mark.gpu
 def test_model_loads_and_reports_device() -> None:
     """A fresh recognizer exposes device + generation cap."""
     rec = _try_load()
@@ -163,6 +165,7 @@ def test_model_loads_and_reports_device() -> None:
 
 
 @pytest.mark.slow
+@pytest.mark.gpu
 def test_recognize_batch_paths_returns_one_result_per_input(
     tmp_path: Path,
 ) -> None:
@@ -180,6 +183,7 @@ def test_recognize_batch_paths_returns_one_result_per_input(
 
 
 @pytest.mark.slow
+@pytest.mark.gpu
 def test_recognize_batch_paths_missing_path_yields_none(tmp_path: Path) -> None:
     """A bogus path produces `FormulaResult(None, False)` for that slot."""
     rec = _try_load()

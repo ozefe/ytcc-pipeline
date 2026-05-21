@@ -18,16 +18,56 @@ def pytest_collection_modifyitems(
     config: pytest.Config,
     items: list[pytest.Item],
 ) -> None:
-    """Skip `integration`-marked tests unless `-m integration` is selected."""
-    if "integration" in (config.getoption("markexpr") or ""):
-        return
+    """Apply opt-in / environment-aware skip rules.
 
-    skipper = pytest.mark.skip(
-        reason="integration tests skipped; run with `pytest -m integration`",
-    )
+    - `integration`: skipped unless `-m integration` is selected.
+    - `slow`: skipped unless `-m slow` is selected (downloads large models / runs real
+      inference; not appropriate for fast CI).
+    - `gpu`: skipped when no CUDA device is reachable, regardless of marker expression.
+      Honors the marker contract documented in `pyproject.toml`.
+
+    The integration / slow checks are intentionally substring matches on the marker
+    expression rather than full parses -- the existing pattern in this project.
+    `pytest -m "not slow"` happens to pass through too, which is fine in practice (the
+    test is skipped either way).
+    """
+    markexpr = config.getoption("markexpr") or ""
+    cuda_available = _cuda_available()
+
     for item in items:
-        if "integration" in item.keywords:
-            item.add_marker(skipper)
+        keywords = item.keywords
+        if "integration" in keywords and "integration" not in markexpr:
+            item.add_marker(
+                pytest.mark.skip(
+                    reason="integration tests skipped; "
+                    "run with `pytest -m integration`",
+                ),
+            )
+        elif "slow" in keywords and "slow" not in markexpr:
+            item.add_marker(
+                pytest.mark.skip(
+                    reason="slow tests skipped; run with `pytest -m slow`",
+                ),
+            )
+        elif "gpu" in keywords and not cuda_available:
+            item.add_marker(
+                pytest.mark.skip(
+                    reason="gpu tests skipped: no CUDA device available",
+                ),
+            )
+
+
+def _cuda_available() -> bool:
+    """Return True when torch reports a usable CUDA device.
+
+    Tolerates the case where torch can't import so the suite doesn't fail at
+    collection on a minimal harness without it.
+    """
+    try:
+        import torch
+    except Exception:
+        return False
+    return bool(torch.cuda.is_available())
 
 
 @pytest.fixture(scope="session")
