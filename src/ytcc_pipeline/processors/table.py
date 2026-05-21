@@ -83,8 +83,14 @@ class TableEngine:
         # `rapid_table` pulls in a heavy ONNXRuntime stack (~1 GiB import cost). Defer
         # the import to constructor time so importing this module for typing remains
         # cheap.
-        from rapid_table import ModelType, RapidTable, RapidTableInput  # noqa: PLC0415
-        from rapid_table.inference_engine.base import InferSession  # noqa: PLC0415
+        from rapid_table import (  # pyright: ignore[reportMissingImports] # noqa: PLC0415
+            ModelType,
+            RapidTable,
+            RapidTableInput,
+        )
+        from rapid_table.inference_engine.base import (  # noqa: PLC0415 # pyright: ignore[reportMissingImports]
+            InferSession,
+        )
 
         ep_cfg = InferSession.engine_cfg["onnxruntime"]["cuda_ep_cfg"]
         if "gpu_id" in ep_cfg:
