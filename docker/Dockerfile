@@ -30,6 +30,20 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
+# Cap BLAS / OpenMP thread fan-out. Without these, every spawn worker on a
+# many-CPU host tries to allocate one OpenBLAS thread per visible CPU. The
+# container's PID limit caps total threads well below that and the worker
+# crashes mid-import with `pthread_create failed ... Resource temporarily
+# unavailable`, surfacing to the parent as BrokenProcessPool. Capping the
+# BLAS thread count to 1 keeps a worker_count=16 pool's total thread budget
+# at ~16 BLAS threads, comfortably under any container limit. Mirrors the
+# OMP/OPENBLAS/MKL settings used by the project's benchmark harness
+# (`benchmarks/run_all.py`).
+ENV OPENBLAS_NUM_THREADS=1 \
+    OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    NUMEXPR_NUM_THREADS=1
+
 # System packages.
 #   libgl1 + libglib2.0-0: opencv-python-headless's image codec backends.
 #       Without them every cv2.imread call on a JPEG / WebP page render
