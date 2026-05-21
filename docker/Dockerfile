@@ -76,14 +76,29 @@ COPY src ./src
 # to resolve the modern wheel set (torch CUDA tags, onnxruntime-gpu) AND to
 # understand PEP 735's `--group` flag. pip's wheel cache is mounted from the
 # BuildKit cache so repeated builds skip the downloads.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    "python${PYTHON_VERSION}" -m venv --upgrade-deps /opt/venv
+
+# Install torch + torchvision from PyTorch's CUDA-12.6 wheel index FIRST. The
+# default PyPI torch wheels ship compiled against the latest CUDA (12.9+),
+# which fails on hosts whose driver advertises an older CUDA runtime version
+# (most vast.ai boxes today report 12.6-12.8). cu126 wheels are forward-
+# compatible with any driver >= 12.6, which covers every modern rental.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    /opt/venv/bin/pip install --index-url https://download.pytorch.org/whl/cu126 \
+        "torch>=2.5,<3" "torchvision>=0.20,<1"
+
+# Project + api group. Torch + torchvision are already satisfied from the
+# previous layer; pip's default --upgrade-strategy=only-if-needed will leave
+# them alone instead of pulling the PyPI variant.
 #
 # `--group api` (not `.[api]`) because pyproject.toml puts FastAPI / uvicorn /
 # python-multipart under `[dependency-groups]` (PEP 735), not under
 # `[project.optional-dependencies]`. The optional-extras syntax silently
-# installs nothing extra in that case.
+# installs nothing extra in that case -- which is exactly how earlier images
+# shipped without a server binary.
 RUN --mount=type=cache,target=/root/.cache/pip \
-    "python${PYTHON_VERSION}" -m venv --upgrade-deps /opt/venv \
-    && /opt/venv/bin/pip install . --group api
+    /opt/venv/bin/pip install . --group api
 
 
 # ---- Runtime (slim): copy venv + the chosen profile's config ---------------
