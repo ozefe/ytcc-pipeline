@@ -114,7 +114,10 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
     CMD curl -fsS http://127.0.0.1:8000/health || exit 1
 
-ENTRYPOINT ["uvicorn", "ytcc_pipeline.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+# Absolute path -- some container runtimes (notably vast.ai) reset PATH before
+# exec, so relying on `/opt/venv/bin` being on PATH for entrypoint resolution
+# is fragile. Hardcoding the venv path is the canonical fix.
+ENTRYPOINT ["/opt/venv/bin/uvicorn", "ytcc_pipeline.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
 
 
 # ---- Baked: pre-download every model weight so the image runs offline ------
