@@ -246,8 +246,9 @@ async def process(  # noqa: PLR0915 -- linear request flow; the path/branch dete
         mirrors the uploaded PDF name (with `.tar` suffix).
 
     Raises:
-        HTTPException(400): unsupported `language`.
-        HTTPException(500): unexpected pipeline failure.
+        HTTPException: 400 for unsupported `language` or pipeline-side `ValueError` /
+            `FileNotFoundError`; 415 when the PDF resolves to scanned in a
+            `scanned_enabled=False` deployment; 500 for any other pipeline failure.
 
     """
     # Short per-request correlation id so concurrent requests' log lines interleave
@@ -273,7 +274,7 @@ async def process(  # noqa: PLR0915 -- linear request flow; the path/branch dete
             language,
         )
         raise HTTPException(
-            status_code=400,
+            status_code=HTTPStatus.BAD_REQUEST,
             detail=f"unsupported language {language!r}; pick from "
             f"{sorted(LANG_TO_RAPIDOCR_LANG)}",
         )
@@ -288,7 +289,7 @@ async def process(  # noqa: PLR0915 -- linear request flow; the path/branch dete
             upload_name,
         )
         raise HTTPException(
-            status_code=415,
+            status_code=HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
             detail=(
                 "scanned PDF processing is disabled in this deployment "
                 "(scanned_enabled=False); resubmit without digital_born=False or "
@@ -429,7 +430,10 @@ async def process(  # noqa: PLR0915 -- linear request flow; the path/branch dete
                 exc,
             )
             background_tasks.add_task(_cleanup_dir, tmp_dir)
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=HTTPStatus.BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
         except Exception as exc:
             logger.exception(
                 "request error: rid=%s pdf=%s status=500",

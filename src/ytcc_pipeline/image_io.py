@@ -6,8 +6,7 @@ Three responsibilities here:
 
 - `read_rgb`: decode a PNG/JPEG file to an HWC uint8 RGB ndarray. Wraps `cv2.imread` and
   `cv2.cvtColor`, raising `OSError` on read failure instead of silently returning `None`
-- `crop_from_page`: slice a bbox region out of an HWC ndarray (or a path, decoded via
-  `read_rgb`).
+- `crop_from_page`: slice a bbox region out of an HWC ndarray.
 - `save_crop`: encode an HWC uint8 RGB ndarray to PNG / JPEG.
 
 Cropping is technically a transform not strictly I/O, but every load/save path in the
@@ -19,10 +18,11 @@ import logging
 from typing import TYPE_CHECKING
 
 import cv2
-import numpy as np
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    import numpy as np
 
     from .config import ImageFormat
 
@@ -55,14 +55,13 @@ def read_rgb(path: Path | str) -> np.ndarray:
 
 
 def crop_from_page(
-    page_image: Path | np.ndarray,
+    page_image: np.ndarray,
     bbox: tuple[float, float, float, float],
 ) -> np.ndarray:
     """Crop the given bbox region out of a page image.
 
     Args:
-        page_image: Path to an image file or an HWC uint8 RGB numpy array. Paths are
-            decoded via `read_rgb`.
+        page_image: HWC uint8 RGB numpy array. Load files via `read_rgb` first.
         bbox: `(x1, y1, x2, y2)` in pixel coords, origin top-left. Floats are rounded to
             the nearest integer; out-of-bounds coords are clamped to the page edges.
 
@@ -72,15 +71,13 @@ def crop_from_page(
     Raises:
         ValueError: bbox has non-positive area, or falls entirely outside the page after
             clamping.
-        OSError: `page_image` was a path and cv2 could not decode it.
     """
     x1, y1, x2, y2 = bbox
     if x2 <= x1 or y2 <= y1:
         msg = f"bbox has non-positive area: {bbox!r}"
         raise ValueError(msg)
 
-    arr = page_image if isinstance(page_image, np.ndarray) else read_rgb(page_image)
-    h, w = arr.shape[:2]
+    h, w = page_image.shape[:2]
 
     x1_i = max(0, round(x1))
     y1_i = max(0, round(y1))
@@ -108,7 +105,7 @@ def crop_from_page(
             w,
             h,
         )
-    return arr[y1_i:y2_i, x1_i:x2_i]
+    return page_image[y1_i:y2_i, x1_i:x2_i]
 
 
 def save_crop(

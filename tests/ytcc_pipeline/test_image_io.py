@@ -13,17 +13,13 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def page_image(tmp_path: Path) -> Path:
-    """A 400x600 PNG with three colored stripes; used to verify cropping coords."""
-    img = Image.new("RGB", (400, 600), color=(255, 255, 255))
-    arr = np.array(img)
+def page_image() -> np.ndarray:
+    """A 400x600 HWC uint8 RGB array with three colored stripes."""
+    arr = np.full((600, 400, 3), 255, dtype=np.uint8)
     arr[0:200, :] = (255, 0, 0)  # red top
     arr[200:400, :] = (0, 255, 0)  # green middle
     arr[400:600, :] = (0, 0, 255)  # blue bottom
-    path = tmp_path / "page.png"
-
-    Image.fromarray(arr).save(path)
-    return path
+    return arr
 
 
 @pytest.mark.parametrize(
@@ -35,7 +31,7 @@ def page_image(tmp_path: Path) -> Path:
     ],
 )
 def test_crop_from_page_extracts_correct_stripe(
-    page_image: Path,
+    page_image: np.ndarray,
     bbox: tuple[float, float, float, float],
     expected_channel: int,
 ) -> None:
@@ -47,13 +43,13 @@ def test_crop_from_page_extracts_correct_stripe(
         assert np.all(crop[:, :, channel] == value)
 
 
-def test_crop_from_page_clamps_to_image_bounds(page_image: Path) -> None:
+def test_crop_from_page_clamps_to_image_bounds(page_image: np.ndarray) -> None:
     crop = crop_from_page(page_image, bbox=(-50.0, -50.0, 450.0, 700.0))
 
     assert crop.shape == (600, 400, 3)
 
 
-def test_crop_from_page_rejects_inverted_bbox(page_image: Path) -> None:
+def test_crop_from_page_rejects_inverted_bbox(page_image: np.ndarray) -> None:
     with pytest.raises(ValueError, match="bbox"):
         crop_from_page(page_image, bbox=(100.0, 100.0, 50.0, 50.0))
 

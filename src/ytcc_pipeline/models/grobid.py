@@ -18,6 +18,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from http import HTTPStatus
 from typing import TYPE_CHECKING
 
 from ytcc_pipeline.schema import Author, Reference
@@ -32,9 +33,6 @@ logger = logging.getLogger(__name__)
 # A four-character all-digit token from TEI `<imprint><date when=...>` is always the
 # 4-digit year (per the TEI/W3C date schema).
 _YEAR_TOKEN_LEN = 4
-
-# `is_grobid_alive` returns True if GROBID answered HTTP 200.
-_HTTP_OK = 200
 
 # GROBID's TEI envelope uses the standard TEI namespace.
 _TEI_NS = "http://www.tei-c.org/ns/1.0"
@@ -444,7 +442,7 @@ def is_grobid_alive(url: str, *, timeout_s: float = 5.0) -> bool:
         # scheme is always HTTP/HTTPS.
         req = urllib.request.Request(endpoint, method="GET")  # noqa: S310
         with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310
-            return resp.status == _HTTP_OK
+            return resp.status == HTTPStatus.OK
     except urllib.error.URLError, TimeoutError, OSError:
         # Probe is never-raising by design (callers route on the bool). Keep the
         # underlying transport error visible so operators investigating an unreachable
