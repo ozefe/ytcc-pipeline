@@ -1,0 +1,53 @@
+# Byte-compiled / packaged
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+
+# Build / packaging artifacts
+build/
+dist/
+wheels/
+.installed.cfg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+.python-version
+.env
+.env.*
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+htmlcov/
+.coverage
+.coverage.*
+.tox/
+.nox/
+
+# Notebooks
+.ipynb_checkpoints/
+.jupyter/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Transient subdirectories inside the committed benchmark results.
+benchmarks/results/bundles/
+benchmarks/results/api_smoke/
+benchmarks/results/*.log
+
+# Model weights pulled at runtime
+*.safetensors
+*.onnx
